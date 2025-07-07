@@ -1,14 +1,19 @@
+import 'package:billing/features/models/bill.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import '../models/product.dart';
-import '../models/bill.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+final firestoreServiceProvider = Provider<FirestoreService>((ref) {
+  return FirestoreService();
+});
 
 class FirestoreService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _db = FirebaseFirestore.instance;
 
-  // ------------------ PRODUCTS ------------------
-
-  Stream<List<Product>> getProductsStream() {
-    return _firestore.collection('products').snapshots().map((snapshot) {
+  // 🔸 Stream of all products
+  Stream<List<Product>> productsStream() {
+    return _db.collection('products').snapshots().map((snapshot) {
       return snapshot.docs
           .map((doc) => Product.fromMap(doc.data(), doc.id))
           .toList();
@@ -16,123 +21,141 @@ class FirestoreService {
   }
 
   Future<void> addProduct(Product product) async {
-    await _firestore.collection('products').add(product.toMap());
+    await _db.collection('products').add(product.toMap());
   }
 
   Future<void> updateProduct(Product product) async {
-    await _firestore
-        .collection('products')
-        .doc(product.id)
-        .update(product.toMap());
+    await _db.collection('products').doc(product.id).update(product.toMap());
   }
 
   Future<void> deleteProduct(String id) async {
-    await _firestore.collection('products').doc(id).delete();
-  }
-
-  // ------------------ BILLS ------------------
-
-  Future<String> generateBillNumber() async {
-    final snapshot =
-        await _firestore
-            .collection('bills')
-            .orderBy('date', descending: true)
-            .limit(1)
-            .get();
-
-    if (snapshot.docs.isEmpty) return 'BILL0001';
-
-    final lastBillNo = snapshot.docs.first['bill_no'] as String;
-    final number = int.tryParse(lastBillNo.replaceAll(RegExp(r'\D'), '')) ?? 0;
-    return 'BILL${(number + 1).toString().padLeft(4, '0')}';
+    await _db.collection('products').doc(id).delete();
   }
 
   Future<void> saveBill(Bill bill) async {
-    final data = bill.toMap();
-
-    // Ensure 'date' is stored as a Timestamp
-    if (data['date'] is DateTime) {
-      data['date'] = Timestamp.fromDate(data['date']);
-    }
-
-    await _firestore.collection('bills').add(data);
+    await _db.collection('bills').doc(bill.id).set(bill.toMap());
   }
 
-  Stream<List<Bill>> getAllBillsStream() {
-    return _firestore
-        .collection('bills')
-        .orderBy('date', descending: true)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => Bill.fromMap(doc.data(), doc.id))
-              .toList();
-        });
+  // 🔸 Fetch all unique shop names
+  Future<List<String>> fetchAllShopNames() async {
+    final snapshot = await _db.collection('bills').get();
+    final names =
+        snapshot.docs.map((doc) => doc['shopName'] as String).toSet().toList();
+    return names;
   }
 
-  Future<List<Bill>> getBillsByMobileAndDate(
-    String mobile,
-    DateTime? start,
-    DateTime? end,
-  ) async {
-    try {
-      Query query = _firestore
-          .collection('bills')
-          .where('customer_mobile', isEqualTo: mobile);
-
-      if (start != null) {
-        query = query.where(
-          'date',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(start),
-        );
-      }
-
-      if (end != null) {
-        query = query.where(
-          'date',
-          isLessThanOrEqualTo: Timestamp.fromDate(end),
-        );
-      }
-
-      final snapshot = await query.orderBy('date', descending: true).get();
-
-      return snapshot.docs
-          .map(
-            (doc) => Bill.fromMap(doc.data() as Map<String, dynamic>, doc.id),
-          )
-          .toList();
-    } catch (e) {
-      print('Error fetching bills: $e');
-      return [];
-    }
-  }
-
-  Future<List<Bill>> getBills({
-    String? mobile,
-    String? billNo,
-    DateTime? start,
-    DateTime? end,
-  }) async {
-    Query query = FirebaseFirestore.instance.collection('bills');
-
-    if (mobile != null && mobile.isNotEmpty) {
-      query = query.where('customer_mobile', isEqualTo: mobile);
-    }
-
-    if (billNo != null && billNo.isNotEmpty) {
-      query = query.where('bill_no', isEqualTo: billNo);
-    }
-
-    if (start != null && end != null) {
-      query = query
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-          .where('date', isLessThanOrEqualTo: Timestamp.fromDate(end));
-    }
-
-    final snapshot = await query.orderBy('date', descending: true).get();
+  // 🔸 Fetch bills by payment status
+  Future<List<Bill>> fetchBillsByStatus(bool isPaid) async {
+    final snapshot =
+        await _db
+            .collection('bills')
+            .where('isPaid', isEqualTo: isPaid)
+            .orderBy('createdAt', descending: true)
+            .get();
 
     return snapshot.docs
-        .map((doc) => Bill.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .map((doc) => Bill.fromMap(doc.data(), doc.id)) // ✅ FIXED
         .toList();
+  }
+
+  // 🔸 Fetch all products
+  Future<List<Product>> fetchProducts() async {
+    final snapshot = await _db.collection('products').get();
+    return snapshot.docs
+        .map((doc) => Product.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
+  Future<String> generateBillNumber() async {
+    final now = DateTime.now();
+    final datePart = DateFormat('yyyyMMdd').format(now);
+
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final snapshot =
+        await _db
+            .collection('bills')
+            .where(
+              'createdAt',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart),
+            )
+            .get();
+
+    final count = snapshot.docs.length + 1;
+    final paddedCount = count.toString().padLeft(3, '0');
+
+    return 'RJ-$datePart$paddedCount';
+  }
+
+  // 🔸 Fetch all unpaid bills for a shop
+  Future<List<Bill>> fetchUnpaidBillsForShop(String shopName) async {
+    final snapshot =
+        await _db
+            .collection('bills')
+            .where('shopName', isEqualTo: shopName)
+            .where('isPaid', isEqualTo: false)
+            .get();
+
+    return snapshot.docs
+        .map((doc) => Bill.fromMap(doc.data(), doc.id)) // ✅ FIXED
+        .toList();
+  }
+
+  // 🔸 Update payment status
+  Future<void> updateBillPaymentStatus(String billId, bool isPaid) async {
+    if (billId.isEmpty) throw Exception('Cannot update: Bill ID is empty');
+
+    final docRef = _db.collection('bills').doc(billId);
+    await docRef.update({'isPaid': isPaid});
+
+    final updatedDoc = await docRef.get();
+    if ((updatedDoc.data()?['isPaid'] ?? false) == true) {
+      print("✔️ Status updated confirmed for bill $billId");
+    }
+  }
+
+  // 🔸 Fetch latest unpaid bill (not used anymore if you use all)
+  Future<Bill?> fetchLatestUnpaidBillForShop(String shopName) async {
+    final querySnapshot =
+        await _db
+            .collection('bills')
+            .where('shopName', isEqualTo: shopName)
+            .where('isPaid', isEqualTo: false)
+            .orderBy('createdAt', descending: true)
+            .limit(1)
+            .get();
+
+    if (querySnapshot.docs.isEmpty) return null;
+
+    final doc = querySnapshot.docs.first;
+    return Bill.fromMap(doc.data(), doc.id); // ✅ FIXED
+  }
+
+  // 🔸 Fetch all shops with unpaid bills
+  Future<List<String>> fetchShopsWithUnpaidBills() async {
+    final snapshot =
+        await _db.collection('bills').where('isPaid', isEqualTo: false).get();
+
+    final shopNames =
+        snapshot.docs.map((doc) => doc['shopName'] as String).toSet().toList();
+    return shopNames;
+  }
+
+  // 🔸 Get bill by bill number
+  Future<Bill?> fetchBillByNumber(String billNumber) async {
+    final snapshot =
+        await _db
+            .collection('bills')
+            .where('billNumber', isEqualTo: billNumber)
+            .get();
+
+    if (snapshot.docs.isEmpty) return null;
+
+    final doc = snapshot.docs.first;
+    return Bill.fromMap(doc.data(), doc.id); // ✅ FIXED
+  }
+
+  Future<void> deleteBill(String billId) async {
+    if (billId.isEmpty) throw Exception('Bill ID is empty');
+    await _db.collection('bills').doc(billId).delete();
   }
 }

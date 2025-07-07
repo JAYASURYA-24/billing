@@ -1,372 +1,471 @@
 import 'package:billing/features/models/bill.dart';
 import 'package:billing/features/providers/bill_provider.dart';
-import 'package:billing/features/providers/product_provider.dart';
+
+import 'package:billing/features/services/pdfservices.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
-class BillingScreen extends ConsumerWidget {
-  final TextEditingController quantityController = TextEditingController();
-  final TextEditingController mobileController = TextEditingController();
-  final TextEditingController searchController = TextEditingController();
+// import '../models/product.dart';
+
+class BillingScreen extends ConsumerStatefulWidget {
+  const BillingScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final productsAsync = ref.watch(productsStreamProvider);
-    final billItems = ref.watch(billItemsProvider);
-    final billItemsNotifier = ref.read(billItemsProvider.notifier);
-    final total = billItemsNotifier.total;
+  ConsumerState<BillingScreen> createState() => _BillingScreenState();
+}
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Billing'),
-        actions: [
-          ElevatedButton.icon(
-            icon: Icon(Icons.refresh),
-            label: Text('New Bill'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            onPressed: () {
-              ref.read(billItemsProvider.notifier).clear();
-              ref.read(customerMobileProvider.notifier).state = '';
-              mobileController.clear();
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('Started new bill')));
-            },
+class _BillingScreenState extends ConsumerState<BillingScreen> {
+  final TextEditingController shopNameController = TextEditingController();
+  String? selectedShopName;
+
+  void _editQuantityDialog(BillItem item) {
+    final controller = TextEditingController(text: item.quantity.toString());
+    int updatedQty = item.quantity;
+
+    showDialog(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: Text('Edit Quantity - ${item.name}'),
+            content: TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(hintText: 'Enter new quantity'),
+              onChanged: (val) {
+                updatedQty = int.tryParse(val) ?? item.quantity;
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  if (updatedQty > 0) {
+                    ref
+                        .read(billingProvider.notifier)
+                        .updateItemQuantity(item, updatedQty);
+                  }
+                },
+                child: const Text('Update'),
+              ),
+            ],
           ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          children: [
-            // Customer Mobile
-            TextField(
-              controller: mobileController,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                labelText: 'Customer Mobile',
-                border: OutlineInputBorder(),
-              ),
-              onChanged:
-                  (val) =>
-                      ref.read(customerMobileProvider.notifier).state = val,
-            ),
-            SizedBox(height: 12),
+    );
+  }
 
-            // Product List
-            Expanded(
-              child: Column(
-                children: [
-                  TextField(
-                    controller: searchController,
-                    decoration: InputDecoration(
-                      labelText: 'Search Product',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged:
-                        (_) => ref.refresh(
-                          productsStreamProvider,
-                        ), // Optional if live filter
+  void _previewBillDialog() async {
+    final shopName = shopNameController.text.trim();
+    final (previewBill, _) = await ref
+        .read(billingProvider.notifier)
+        .generateBill(shopName, false, isPreview: true);
+
+    bool tempPaid = false;
+    final paidAmountController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Preview Bill'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('🧾 Shop: $shopName'),
+                      const SizedBox(height: 10),
+
+                      const Text(
+                        'Previous Bill Status:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      if (previewBill.previousUnpaid == 0)
+                        const Text(
+                          '✅ No previous pending bills.',
+                          style: TextStyle(color: Colors.green),
+                        )
+                      else
+                        Text(
+                          '🔴 ₹${previewBill.previousUnpaid.toStringAsFixed(2)} unpaid from last bill',
+                          style: const TextStyle(color: Colors.red),
+                        ),
+
+                      const Divider(),
+
+                      const Text(
+                        'Current Purchase:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 6),
+                      ...previewBill.items.map(
+                        (item) => ListTile(
+                          dense: true,
+                          title: Text('${item.name} x${item.quantity}'),
+                          trailing: Text(
+                            '₹${(item.price * item.quantity).toStringAsFixed(2)}',
+                          ),
+                        ),
+                      ),
+                      const Divider(),
+
+                      Text(
+                        '🕗 Previous Unpaid Total: ₹${previewBill.previousUnpaid.toStringAsFixed(2)}',
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                      Text(
+                        '🛒 Current Purchase Total: ₹${previewBill.currentPurchaseTotal.toStringAsFixed(2)}',
+                        style: const TextStyle(color: Colors.blueGrey),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '🧾 Grand Total (Final): ₹${previewBill.total.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                          fontSize: 16,
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // 🔹 Paid Amount TextField
+                      TextField(
+                        controller: paidAmountController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Enter Paid Amount (if any)',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 🔹 Payment Status
+                      Row(
+                        children: [
+                          const Text('Payment Status:'),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Radio<bool>(
+                                  value: true,
+                                  groupValue: tempPaid,
+                                  onChanged:
+                                      (val) => setState(() => tempPaid = true),
+                                ),
+                                const Text('Paid'),
+                                Radio<bool>(
+                                  value: false,
+                                  groupValue: tempPaid,
+                                  onChanged:
+                                      (val) => setState(() => tempPaid = false),
+                                ),
+                                const Text('Unpaid'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  SizedBox(height: 8),
-                  Expanded(
-                    child: productsAsync.when(
-                      data: (products) {
-                        final query = searchController.text.toLowerCase();
-                        final filteredProducts =
-                            products
-                                .where(
-                                  (p) => p.name.toLowerCase().contains(query),
-                                )
-                                .toList();
-
-                        return ListView.builder(
-                          itemCount: filteredProducts.length,
-                          itemBuilder: (context, index) {
-                            final product = filteredProducts[index];
-                            return ListTile(
-                              title: Text(product.name),
-                              subtitle: Text(
-                                '₹${product.price.toStringAsFixed(2)}',
-                              ),
-                              trailing: IconButton(
-                                icon: Icon(Icons.add),
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder:
-                                        (_) => AlertDialog(
-                                          title: Text('Add ${product.name}'),
-                                          content: TextField(
-                                            controller: quantityController,
-                                            decoration: InputDecoration(
-                                              labelText: 'Quantity',
-                                            ),
-                                            keyboardType: TextInputType.number,
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () {
-                                                quantityController.clear();
-                                                Navigator.pop(context);
-                                              },
-                                              child: Text('Cancel'),
-                                            ),
-                                            ElevatedButton(
-                                              onPressed: () {
-                                                final qty =
-                                                    int.tryParse(
-                                                      quantityController.text,
-                                                    ) ??
-                                                    1;
-                                                billItemsNotifier.addItem(
-                                                  BillItem(
-                                                    product: product.name,
-                                                    qty: qty,
-                                                    price: product.price,
-                                                  ),
-                                                );
-                                                quantityController.clear();
-                                                Navigator.pop(context);
-                                              },
-                                              child: Text('Add'),
-                                            ),
-                                          ],
-                                        ),
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                        );
-                      },
-                      loading: () => Center(child: CircularProgressIndicator()),
-                      error: (e, _) => Center(child: Text('Error: $e')),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            Divider(),
-
-            // Bill Items Preview
-            if (billItems.isNotEmpty) ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Current Bill',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ),
-              SizedBox(height: 8),
-              Container(
-                height: 150,
-                child: ListView.builder(
-                  itemCount: billItems.length,
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    shopNameController.clear();
+
+                    final paidAmount =
+                        double.tryParse(paidAmountController.text.trim()) ??
+                        0.0;
+
+                    final (finalBill, _) = await ref
+                        .read(billingProvider.notifier)
+                        .generateBill(
+                          shopName,
+                          tempPaid,
+                          paidAmount: paidAmount,
+                        );
+
+                    await generateAndOpenPdf(finalBill);
+                  },
+                  child: const Text('Generate PDF'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showProductSelectionDialog() {
+    final productAsync = ref.read(productsProvider);
+    final Map<String, TextEditingController> quantityControllers = {};
+
+    showDialog(
+      context: context,
+      barrierDismissible:
+          false, // Dialog stays open until user cancels or submits
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Select Products & Quantities'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: productAsync.when(
+              data: (products) {
+                for (var product in products) {
+                  quantityControllers[product.id] =
+                      TextEditingController(); // No prefilled value
+                }
+
+                return ListView.separated(
+                  itemCount: products.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
-                    final item = billItems[index];
+                    final product = products[index];
+                    final controller = quantityControllers[product.id]!;
+
                     return ListTile(
-                      title: Text(item.product),
-                      subtitle: Text('Qty: ${item.qty}'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      title: Text(product.name),
+                      subtitle: Row(
                         children: [
-                          Text(
-                            '₹${(item.qty * item.price).toStringAsFixed(2)}',
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.edit, size: 20),
-                            onPressed: () {
-                              quantityController.text = item.qty.toString();
-                              showDialog(
-                                context: context,
-                                builder:
-                                    (_) => AlertDialog(
-                                      title: Text(
-                                        'Edit Quantity for ${item.product}',
-                                      ),
-                                      content: TextField(
-                                        controller: quantityController,
-                                        decoration: InputDecoration(
-                                          labelText: 'Quantity',
-                                        ),
-                                        keyboardType: TextInputType.number,
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed:
-                                              () => Navigator.pop(context),
-                                          child: Text('Cancel'),
-                                        ),
-                                        ElevatedButton(
-                                          onPressed: () {
-                                            final qty =
-                                                int.tryParse(
-                                                  quantityController.text,
-                                                ) ??
-                                                item.qty;
-                                            ref
-                                                .read(
-                                                  billItemsProvider.notifier,
-                                                )
-                                                .updateItemQty(index, qty);
-                                            Navigator.pop(context);
-                                            quantityController.clear();
-                                          },
-                                          child: Text('Update'),
-                                        ),
-                                      ],
-                                    ),
-                              );
-                            },
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.delete, size: 20),
-                            onPressed:
-                                () => billItemsNotifier.removeItem(
-                                  billItems[index].product,
-                                ),
+                          const Text('Qty: '),
+                          SizedBox(
+                            width: 60,
+                            child: TextField(
+                              controller: controller,
+                              keyboardType: TextInputType.number,
+                              // decoration: const InputDecoration(
+                              //   isDense: true,
+                              //   contentPadding: EdgeInsets.symmetric(
+                              //     horizontal: 6,
+                              //     vertical: 8,
+                              //   ),
+                              //   border: OutlineInputBorder(),
+                              // ),
+                            ),
                           ),
                         ],
                       ),
                     );
                   },
-                ),
-              ),
-              Divider(),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  'Total: ₹${total.toStringAsFixed(2)}',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ),
-              SizedBox(height: 8),
-            ],
-
-            // Generate PDF Button
-            ElevatedButton.icon(
-              icon: Icon(Icons.picture_as_pdf),
-              label: Text('Generate Bill & PDF'),
-              onPressed: () async {
-                // Show preview first
-                showDialog(
-                  context: context,
-                  builder:
-                      (_) => AlertDialog(
-                        title: Text('Preview Bill'),
-                        content: SizedBox(
-                          height: 300,
-                          width: double.maxFinite,
-                          child: ListView(
-                            children: [
-                              Text('Bill No: (To be generated)'),
-                              Text('Customer: ${mobileController.text}'),
-                              Divider(),
-                              ...billItems.map(
-                                (item) => Text(
-                                  '${item.product} x${item.qty} = ₹${(item.qty * item.price).toStringAsFixed(2)}',
-                                ),
-                              ),
-                              Divider(),
-                              Text(
-                                'Total: ₹${total.toStringAsFixed(2)}',
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: Text('Cancel'),
-                          ),
-                          ElevatedButton(
-                            child: Text('Confirm & Print'),
-                            onPressed: () async {
-                              Navigator.pop(context); // Close preview
-
-                              final service = ref.read(
-                                firestoreServiceProvider,
-                              );
-                              final billNo = await service.generateBillNumber();
-                              final customerMobile = ref.read(
-                                customerMobileProvider,
-                              );
-                              final bill = Bill(
-                                id: '',
-                                billNo: billNo,
-                                customerMobile: customerMobile,
-                                items: billItems,
-                                totalAmount: total,
-                                date: DateTime.now(),
-                              );
-
-                              await service.saveBill(bill);
-
-                              final pdf = pw.Document();
-                              pdf.addPage(
-                                pw.Page(
-                                  build:
-                                      (pw.Context context) => pw.Column(
-                                        crossAxisAlignment:
-                                            pw.CrossAxisAlignment.start,
-                                        children: [
-                                          pw.Text(
-                                            'Shop Invoice',
-                                            style: pw.TextStyle(fontSize: 24),
-                                          ),
-                                          pw.SizedBox(height: 10),
-                                          pw.Text('Bill No: ${bill.billNo}'),
-                                          pw.Text(
-                                            'Customer: ${bill.customerMobile}',
-                                          ),
-                                          pw.Text(
-                                            'Date: ${bill.date.toString()}',
-                                          ),
-                                          pw.Divider(),
-                                          ...bill.items.map(
-                                            (item) => pw.Text(
-                                              '${item.product} x${item.qty} - ₹${(item.qty * item.price).toStringAsFixed(2)}',
-                                            ),
-                                          ),
-                                          pw.Divider(),
-                                          pw.Text(
-                                            'Total: ₹${bill.totalAmount.toStringAsFixed(2)}',
-                                            style: pw.TextStyle(
-                                              fontWeight: pw.FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                ),
-                              );
-
-                              await Printing.layoutPdf(
-                                onLayout: (format) async => pdf.save(),
-                              );
-
-                              ref.read(billItemsProvider.notifier).clear();
-                              mobileController.clear();
-
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Bill Saved & PDF Generated'),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
                 );
               },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) => const Text('Failed to load products'),
             ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final products = ref.read(productsProvider).asData?.value ?? [];
+                for (var product in products) {
+                  final qtyStr =
+                      quantityControllers[product.id]?.text.trim() ?? '0';
+                  final qty = int.tryParse(qtyStr) ?? 0;
+                  if (qty > 0) {
+                    ref.read(billingProvider.notifier).addItem(product, qty);
+                  }
+                }
+                Navigator.pop(context); // Close dialog after all added
+              },
+              child: const Text('Done'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
-            SizedBox(height: 8),
+  @override
+  Widget build(BuildContext context) {
+    final bill = ref.watch(billingProvider);
+    final productAsync = ref.watch(productsProvider);
+    final shopNamesAsync = ref.watch(shopNamesProvider);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFE3F2FD),
+
+      appBar: AppBar(
+        title: const Text(
+          'Billing Screen',
+          style: TextStyle(color: Colors.white),
+        ),
+        backgroundColor: const Color.fromARGB(255, 2, 113, 192),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          children: [
+            // Shop Name Field with Autocomplete
+            shopNamesAsync.when(
+              data:
+                  (names) => Column(
+                    children: [
+                      Autocomplete<String>(
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text == '')
+                            return const Iterable<String>.empty();
+                          return names.where(
+                            (name) => name.toLowerCase().contains(
+                              textEditingValue.text.toLowerCase(),
+                            ),
+                          );
+                        },
+                        onSelected: (String selection) {
+                          shopNameController.text = selection;
+                        },
+                        fieldViewBuilder: (
+                          context,
+                          controller,
+                          focusNode,
+                          onFieldSubmitted,
+                        ) {
+                          controller.text = shopNameController.text;
+                          controller.selection = TextSelection.fromPosition(
+                            TextPosition(offset: controller.text.length),
+                          );
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            decoration: const InputDecoration(
+                              labelText: 'Shop Name',
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: (val) => shopNameController.text = val,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+              loading: () => const CircularProgressIndicator(),
+              error: (_, __) => const Text('Failed to load shop names'),
+            ),
+            const SizedBox(height: 10),
+            const Divider(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                ElevatedButton.icon(
+                  style: ButtonStyle(
+                    backgroundColor: WidgetStatePropertyAll(Colors.white),
+                  ),
+                  onPressed: _showProductSelectionDialog,
+                  icon: const Icon(
+                    Icons.add_shopping_cart,
+                    color: const Color.fromARGB(255, 2, 113, 192),
+                  ),
+                  label: const Text(
+                    'Add Products',
+                    style: TextStyle(
+                      color: const Color.fromARGB(255, 2, 113, 192),
+                    ),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  style: ButtonStyle(
+                    backgroundColor: WidgetStatePropertyAll(Colors.white),
+                  ),
+                  onPressed: _previewBillDialog,
+                  icon: const Icon(
+                    Icons.preview,
+                    color: const Color.fromARGB(255, 2, 113, 192),
+                  ),
+                  label: const Text(
+                    'Preview Bill',
+                    style: TextStyle(
+                      color: const Color.fromARGB(255, 2, 113, 192),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            if (bill.items.isNotEmpty)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Added Products:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: bill.items.length,
+                        itemBuilder: (_, index) {
+                          final item = bill.items[index];
+                          return ListTile(
+                            title: Text('${item.name} x${item.quantity}'),
+                            subtitle: Text(
+                              '₹${item.price.toStringAsFixed(2)} each',
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '₹${(item.price * item.quantity).toStringAsFixed(2)}',
+                                ),
+                                const SizedBox(width: 10),
+                                IconButton(
+                                  icon: const Icon(Icons.edit, size: 20),
+                                  onPressed: () => _editQuantityDialog(item),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.remove_circle,
+                                    size: 20,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () {
+                                    ref
+                                        .read(billingProvider.notifier)
+                                        .removeItem(item);
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Total: ₹${bill.total.toStringAsFixed(2)}',
+                          style: TextStyle(fontSize: 20),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

@@ -1,53 +1,47 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:billing/features/models/product.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-import '../models/bill.dart';
-import '../models/product.dart';
+
 import '../providers/product_provider.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
+  const AdminScreen({super.key});
+
   @override
   ConsumerState<AdminScreen> createState() => _AdminScreenState();
 }
 
 class _AdminScreenState extends ConsumerState<AdminScreen> {
-  final TextEditingController searchController = TextEditingController();
-  final TextEditingController nameController = TextEditingController();
-  final TextEditingController priceController = TextEditingController();
-  final TextEditingController billNoController = TextEditingController();
+  String _searchQuery = '';
 
-  DateTime? startDate;
-  DateTime? endDate;
-
-  void showProductDialog(
+  void _showProductDialog(
     BuildContext context,
     WidgetRef ref, {
     Product? product,
   }) {
-    if (product != null) {
-      nameController.text = product.name;
-      priceController.text = product.price.toString();
-    } else {
-      nameController.clear();
-      priceController.clear();
-    }
+    final _nameController = TextEditingController(text: product?.name ?? '');
+    final _priceController = TextEditingController(
+      text: product?.price.toString() ?? '',
+    );
+    final isEdit = product != null;
 
     showDialog(
+      barrierDismissible: false,
       context: context,
       builder:
           (_) => AlertDialog(
-            title: Text(product == null ? 'Add Product' : 'Edit Product'),
+            title: Text(isEdit ? 'Edit Product' : 'Add Product'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: nameController,
-                  decoration: InputDecoration(labelText: 'Product Name'),
+                TextFormField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(labelText: 'Product Name'),
                 ),
-                TextField(
-                  controller: priceController,
-                  decoration: InputDecoration(labelText: 'Price'),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _priceController,
+                  decoration: const InputDecoration(labelText: 'Price'),
                   keyboardType: TextInputType.number,
                 ),
               ],
@@ -55,24 +49,31 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: Text('Cancel'),
+                child: const Text('Cancel'),
               ),
               ElevatedButton(
-                child: Text('Save'),
-                onPressed: () async {
-                  final name = nameController.text;
-                  final price = double.tryParse(priceController.text) ?? 0.0;
-                  if (product == null) {
-                    await ref
-                        .read(firestoreServiceProvider)
-                        .addProduct(Product(id: '', name: name, price: price));
+                child: Text(isEdit ? 'Update' : 'Add'),
+                onPressed: () {
+                  final name = _nameController.text.trim();
+                  final price =
+                      double.tryParse(_priceController.text.trim()) ?? 0;
+
+                  if (name.isEmpty || price <= 0) return;
+
+                  final newProduct = Product(
+                    id: product?.id ?? '',
+                    name: name,
+                    price: price,
+                  );
+
+                  if (isEdit) {
+                    ref
+                        .read(productProvider.notifier)
+                        .updateProduct(newProduct);
                   } else {
-                    await ref
-                        .read(firestoreServiceProvider)
-                        .updateProduct(
-                          Product(id: product.id, name: name, price: price),
-                        );
+                    ref.read(productProvider.notifier).addProduct(newProduct);
                   }
+
                   Navigator.pop(context);
                 },
               ),
@@ -81,220 +82,147 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final service = ref.read(firestoreServiceProvider);
-    final products = ref.watch(productsStreamProvider);
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    Product product,
+  ) async {
+    final shouldDelete = await showDialog<bool>(
+      barrierDismissible: false,
 
-    return Scaffold(
-      appBar: AppBar(title: Text('Admin Panel')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: searchController,
-                keyboardType: TextInputType.phone,
-                decoration: InputDecoration(labelText: 'Enter Mobile Number'),
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: const Text('Confirm Delete'),
+            content: Text('Are you sure you want to delete "${product.name}"?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
               ),
-
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () async {
-                          final date = await showDatePicker(
-                            context: context,
-                            initialDate: DateTime.now(),
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime.now(),
-                          );
-                          if (date != null) setState(() => startDate = date);
-                        },
-                        child: Text(
-                          startDate == null
-                              ? 'Start Date'
-                              : DateFormat.yMMMd().format(startDate!),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () async {
-                          final date = await showDatePicker(
-                            context: context,
-                            initialDate: DateTime.now(),
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime.now(),
-                          );
-                          if (date != null) setState(() => endDate = date);
-                        },
-                        child: Text(
-                          endDate == null
-                              ? 'End Date'
-                              : DateFormat.yMMMd().format(endDate!),
-                        ),
-                      ),
-                    ),
-                  ],
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color.fromARGB(255, 228, 137, 130),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [Text("OR")],
-                ),
-              ),
-              TextField(
-                controller: billNoController,
-                decoration: InputDecoration(labelText: 'Enter Bill Number'),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 30),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton(
-                      child: Text('Search Customer Bills'),
-                      onPressed: () async {
-                        final mobile = searchController.text.trim();
-                        final billNo = billNoController.text.trim();
-
-                        final bills = await service.getBills(
-                          mobile: mobile.isEmpty ? null : mobile,
-                          billNo: billNo.isEmpty ? null : billNo,
-                          start: startDate,
-                          end: endDate,
-                        );
-
-                        if (bills.isEmpty) {
-                          showDialog(
-                            context: context,
-                            builder:
-                                (_) => AlertDialog(
-                                  title: Text('No Results'),
-                                  content: Text(
-                                    'No bills found for your query.',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: Text('OK'),
-                                    ),
-                                  ],
-                                ),
-                          );
-                          return;
-                        }
-
-                        showDialog(
-                          context: context,
-                          builder:
-                              (_) => AlertDialog(
-                                title: Text('Bills Found'),
-                                content: SizedBox(
-                                  width: double.maxFinite,
-                                  child: ListView.builder(
-                                    shrinkWrap: true,
-                                    itemCount: bills.length,
-                                    itemBuilder: (context, index) {
-                                      final bill = bills[index];
-                                      return ExpansionTile(
-                                        title: Text('Bill No: ${bill.billNo}'),
-                                        subtitle: Text(
-                                          'Mobile: ${bill.customerMobile}\nDate: ${DateFormat.yMMMd().format(bill.date)}\nTotal: ₹${bill.totalAmount.toStringAsFixed(2)}',
-                                        ),
-                                        children: [
-                                          Divider(),
-                                          ...bill.items.map(
-                                            (item) => ListTile(
-                                              title: Text(item.product),
-                                              subtitle: Text(
-                                                'Qty: ${item.qty}',
-                                              ),
-                                              trailing: Text(
-                                                '₹${item.price.toStringAsFixed(2)}',
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: Text('Close'),
-                                  ),
-                                ],
-                              ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-
-              Divider(),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'Available Product List',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ),
-              products.when(
-                data:
-                    (items) => ListView.builder(
-                      shrinkWrap: true,
-                      physics: NeverScrollableScrollPhysics(),
-                      itemCount: items.length,
-                      itemBuilder:
-                          (_, index) => ListTile(
-                            title: Text(items[index].name),
-                            subtitle: Text(
-                              '₹${items[index].price.toStringAsFixed(2)}',
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(Icons.edit),
-                                  onPressed:
-                                      () => showProductDialog(
-                                        context,
-                                        ref,
-                                        product: items[index],
-                                      ),
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.delete),
-                                  onPressed:
-                                      () => ref
-                                          .read(firestoreServiceProvider)
-                                          .deleteProduct(items[index].id),
-                                ),
-                              ],
-                            ),
-                          ),
-                    ),
-                loading: () => Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('Error: $e')),
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Delete'),
               ),
             ],
           ),
+    );
+
+    if (shouldDelete == true) {
+      ref.read(productProvider.notifier).deleteProduct(product.id);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('"${product.name}" deleted')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final products = ref.watch(productProvider);
+
+    final filteredProducts =
+        products
+            .where(
+              (p) => p.name.toLowerCase().contains(_searchQuery.toLowerCase()),
+            )
+            .toList();
+
+    return SafeArea(
+      top: false,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFE3F2FD),
+        appBar: AppBar(
+          title: const Text(
+            'Admin-Products',
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: const Color.fromARGB(255, 2, 113, 192),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.add),
-        onPressed: () => showProductDialog(context, ref),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _showProductDialog(context, ref),
+          backgroundColor: const Color.fromARGB(255, 2, 113, 192),
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
+        body: Column(
+          children: [
+            // 🔍 Search Bar
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'Search product by name...',
+                  prefixIcon: const Icon(Icons.search),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
+              ),
+            ),
+
+            // 📋 Product List
+            Expanded(
+              child:
+                  filteredProducts.isEmpty
+                      ? const Center(child: Text('No products found.'))
+                      : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: filteredProducts.length,
+                        itemBuilder: (_, index) {
+                          final product = filteredProducts[index];
+                          return Card(
+                            color: Colors.white,
+                            margin: const EdgeInsets.symmetric(vertical: 6),
+                            child: ListTile(
+                              title: Text(product.name),
+                              subtitle: Text(
+                                '₹ ${product.price.toStringAsFixed(2)}',
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      color: Colors.orangeAccent,
+                                    ),
+                                    onPressed:
+                                        () => _showProductDialog(
+                                          context,
+                                          ref,
+                                          product: product,
+                                        ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed:
+                                        () => _confirmDelete(
+                                          context,
+                                          ref,
+                                          product,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+            ),
+          ],
+        ),
       ),
     );
   }
