@@ -18,10 +18,6 @@ final unpaidBillsFutureProvider = FutureProvider.family<List<Bill>, String>((
   return firestore.fetchUnpaidBillsForShop(shopName);
 });
 
-final shopNamesProvider = FutureProvider<List<String>>((ref) async {
-  return ref.watch(firestoreServiceProvider).fetchAllShopNames();
-});
-
 final productsProvider = StreamProvider<List<Product>>((ref) {
   final firestoreService = ref.watch(firestoreServiceProvider);
   return firestoreService.productsStream();
@@ -99,7 +95,7 @@ class BillingNotifier extends StateNotifier<Bill> {
 
   Future<String> _generateBillNumber() async {
     final now = DateTime.now();
-    final datePart = DateFormat('yyyyMMdd').format(now);
+    final datePart = DateFormat('yyMMdd').format(now);
 
     final todayStart = DateTime(now.year, now.month, now.day);
     final snapshot =

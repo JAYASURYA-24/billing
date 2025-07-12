@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../models/product.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/shop.dart';
 
 final firestoreServiceProvider = Provider<FirestoreService>((ref) {
   return FirestoreService();
@@ -34,6 +35,30 @@ class FirestoreService {
 
   Future<void> saveBill(Bill bill) async {
     await _db.collection('bills').doc(bill.id).set(bill.toMap());
+  }
+
+  // STREAM of Shops
+  Stream<List<Shop>> shopsStream() {
+    return _db.collection('shops').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return Shop.fromMap(doc.data(), doc.id);
+      }).toList();
+    });
+  }
+
+  // Add shop
+  Future<void> addShop(Shop shop) async {
+    await _db.collection('shops').add(shop.toMap());
+  }
+
+  // Update shop
+  Future<void> updateShop(Shop shop) async {
+    await _db.collection('shops').doc(shop.id).update(shop.toMap());
+  }
+
+  // Delete shop
+  Future<void> deleteShop(String id) async {
+    await _db.collection('shops').doc(id).delete();
   }
 
   // 🔸 Fetch all unique shop names

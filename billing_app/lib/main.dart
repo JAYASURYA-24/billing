@@ -45,10 +45,10 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  int _currentIndex = 0;
-  final PageController _pageController = PageController();
+  int _currentIndex = 1;
+  final PageController _pageController = PageController(initialPage: 1);
   final NotchBottomBarController _barController = NotchBottomBarController(
-    index: 0,
+    index: 1,
   );
 
   final List<Widget> _screens = const [
