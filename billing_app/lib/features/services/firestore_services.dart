@@ -126,16 +126,146 @@ class FirestoreService {
   }
 
   // 🔸 Update payment status
+  // Future<void> updateBillPaymentStatus(String billId, bool isPaid) async {
+  //   if (billId.isEmpty) throw Exception('Cannot update: Bill ID is empty');
+
+  //   final docRef = _db.collection('bills').doc(billId);
+  //   await docRef.update({'isPaid': isPaid});
+
+  //   final updatedDoc = await docRef.get();
+  //   if ((updatedDoc.data()?['isPaid'] ?? false) == true) {
+  //     print("✔️ Status updated confirmed for bill $billId");
+  //   }
+  // }
+
+  // Future<void> updateBillPaymentStatus(String billId, bool isPaid) async {
+  //   if (billId.isEmpty) throw Exception('Cannot update: Bill ID is empty');
+
+  //   final docRef = _db.collection('bills').doc(billId);
+  //   await docRef.update({'isPaid': isPaid});
+
+  //   print("✔️ Bill $billId marked as paid.");
+  // }
+
+  // Future<void> markAllUnpaidBillsAsPaid(String shopName) async {
+  //   final querySnapshot =
+  //       await _db
+  //           .collection('bills')
+  //           .where('shopName', isEqualTo: shopName)
+  //           .where('isPaid', isEqualTo: false)
+  //           .get();
+
+  //   final unpaidBills = querySnapshot.docs;
+
+  //   for (final doc in unpaidBills) {
+  //     await updateBillPaymentStatus(doc.id, true);
+  //   }
+
+  //   print("✅ All unpaid bills for shop '$shopName' have been marked as paid.");
+  // }
+
+  // Future<void> markUnpaidBillsAsPaidAndmakelastestasunpiad(
+  //   String shopName,
+  //   double newTotal,
+  // ) async {
+  //   final querySnapshot =
+  //       await _db
+  //           .collection('bills')
+  //           .where('shopName', isEqualTo: shopName)
+  //           .where('isPaid', isEqualTo: false)
+  //           .get();
+
+  //   final unpaidBills = querySnapshot.docs;
+
+  //   for (final doc in unpaidBills) {
+  //     await updateBillPartialTotal(doc.id, newTotal);
+  //   }
+
+  //   print("✅ All unpaid bills for shop '$shopName' have been marked as paid.");
+  // }
+
+  // Future<void> updateBillPartialTotal(String billId, double newTotal) async {
+  //   if (billId.isEmpty) throw Exception('Bill ID is empty');
+
+  //   final docRef = _db.collection('bills').doc(billId);
+  //   await docRef.update({'total': newTotal, 'isPaid': false});
+
+  //   print(
+  //     "⚠️ Bill $billId updated with remaining unpaid: \$${newTotal.toStringAsFixed(2)}",
+  //   );
+  // }
+
   Future<void> updateBillPaymentStatus(String billId, bool isPaid) async {
     if (billId.isEmpty) throw Exception('Cannot update: Bill ID is empty');
 
     final docRef = _db.collection('bills').doc(billId);
     await docRef.update({'isPaid': isPaid});
 
-    final updatedDoc = await docRef.get();
-    if ((updatedDoc.data()?['isPaid'] ?? false) == true) {
-      print("✔️ Status updated confirmed for bill $billId");
+    print("✔️ Bill $billId marked as paid.");
+  }
+
+  Future<void> updateBillPartialTotal(String billId, double newTotal) async {
+    if (billId.isEmpty) throw Exception('Bill ID is empty');
+
+    final docRef = _db.collection('bills').doc(billId);
+    await docRef.update({'total': newTotal, 'isPaid': false});
+
+    print(
+      "⚠️ Bill $billId updated with remaining unpaid: \$${newTotal.toStringAsFixed(2)}",
+    );
+  }
+
+  Future<void> markAllUnpaidBillsAsPaid(String shopName) async {
+    final querySnapshot =
+        await _db
+            .collection('bills')
+            .where('shopName', isEqualTo: shopName)
+            .where('isPaid', isEqualTo: false)
+            .get();
+
+    final unpaidBills = querySnapshot.docs;
+
+    for (final doc in unpaidBills) {
+      await updateBillPaymentStatus(doc.id, true);
     }
+
+    print("✅ All unpaid bills for shop '$shopName' have been marked as paid.");
+  }
+
+  Future<void> markUnpaidBillsAsPaidAndMakeLatestAsUnpaid(
+    String shopName,
+    double newTotal,
+  ) async {
+    final querySnapshot =
+        await _db
+            .collection('bills')
+            .where('shopName', isEqualTo: shopName)
+            .where('isPaid', isEqualTo: false)
+            .orderBy('createdAt') // oldest to latest
+            .get();
+
+    final unpaidBills = querySnapshot.docs;
+
+    if (unpaidBills.isEmpty) {
+      print("ℹ️ No unpaid bills found for shop '$shopName'.");
+      return;
+    }
+
+    final latestBillDoc = unpaidBills.last;
+    final otherBills = unpaidBills.sublist(0, unpaidBills.length - 1);
+
+    // Mark all other unpaid bills as paid
+    for (final doc in otherBills) {
+      await updateBillPaymentStatus(doc.id, true);
+    }
+
+    // Update latest bill with remaining unpaid amount
+    await updateBillPartialTotal(latestBillDoc.id, newTotal);
+
+    print(
+      "✅ All unpaid bills except the latest have been marked as paid. "
+      "Latest bill updated with remaining amount: \$${newTotal.toStringAsFixed(2)}",
+    );
   }
 
   // 🔸 Fetch latest unpaid bill (not used anymore if you use all)
@@ -163,6 +293,30 @@ class FirestoreService {
     final shopNames =
         snapshot.docs.map((doc) => doc['shopName'] as String).toSet().toList();
     return shopNames;
+  }
+
+  Future<List<String>> fetchShopsWithpaidBills() async {
+    final snapshot =
+        await _db.collection('bills').where('isPaid', isEqualTo: true).get();
+
+    final shopNames =
+        snapshot.docs.map((doc) => doc['shopName'] as String).toSet().toList();
+    return shopNames;
+  }
+
+  Future<Bill?> fetchLatestpaidBillForShop(String shopName) async {
+    final querySnapshot =
+        await _db
+            .collection('bills')
+            .where('shopName', isEqualTo: shopName)
+            .where('isPaid', isEqualTo: true)
+            .limit(1)
+            .get();
+
+    if (querySnapshot.docs.isEmpty) return null;
+
+    final doc = querySnapshot.docs.first;
+    return Bill.fromMap(doc.data(), doc.id); // ✅ FIXED
   }
 
   // 🔸 Get bill by bill number

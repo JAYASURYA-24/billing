@@ -26,7 +26,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -55,6 +55,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
           indicatorColor: Colors.orangeAccent,
           controller: _tabController,
           tabs: const [
+            Tab(text: 'Paid Bills'),
             Tab(text: 'Unpaid Bills'),
             Tab(text: 'Search by Bill No'),
           ],
@@ -68,10 +69,16 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: TextField(
+                  cursorColor: Color.fromARGB(255, 2, 113, 192),
                   controller: _searchController,
                   decoration: const InputDecoration(
                     hintText: 'Search by shop name...',
                     prefixIcon: Icon(Icons.search),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: Color.fromARGB(255, 2, 113, 192),
+                      ),
+                    ),
                   ),
                   onChanged:
                       (value) =>
@@ -80,10 +87,14 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
               ),
               Expanded(
                 child: FutureBuilder<List<String>>(
-                  future: firestore.fetchShopsWithUnpaidBills(),
+                  future: firestore.fetchShopsWithpaidBills(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: Color.fromARGB(255, 2, 113, 192),
+                        ),
+                      );
                     }
                     final shops =
                         snapshot.data!
@@ -92,16 +103,14 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                             )
                             .toList();
                     if (shops.isEmpty) {
-                      return const Center(
-                        child: Text('No unpaid bills found.'),
-                      );
+                      return const Center(child: Text('No paid bills found.'));
                     }
                     return ListView.builder(
                       itemCount: shops.length,
                       itemBuilder: (context, index) {
                         final shop = shops[index];
                         return FutureBuilder<Bill?>(
-                          future: firestore.fetchLatestUnpaidBillForShop(shop),
+                          future: firestore.fetchLatestpaidBillForShop(shop),
                           builder: (context, billSnap) {
                             if (!billSnap.hasData)
                               return const SizedBox.shrink();
@@ -115,7 +124,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                 ),
                               ),
                               subtitle: Text(
-                                'Balance : ₹ ${bill.total.toStringAsFixed(2)}',
+                                'Balance : \$ ${bill.total.toStringAsFixed(2)}',
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: Colors.red,
@@ -151,10 +160,110 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: TextField(
+                  cursorColor: Color.fromARGB(255, 2, 113, 192),
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    hintText: 'Search by shop name...',
+                    prefixIcon: Icon(Icons.search),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: Color.fromARGB(255, 2, 113, 192),
+                      ),
+                    ),
+                  ),
+                  onChanged:
+                      (value) =>
+                          setState(() => shopQuery = value.toLowerCase()),
+                ),
+              ),
+              Expanded(
+                child: FutureBuilder<List<String>>(
+                  future: firestore.fetchShopsWithUnpaidBills(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: Color.fromARGB(255, 2, 113, 192),
+                        ),
+                      );
+                    }
+                    final shops =
+                        snapshot.data!
+                            .where(
+                              (shop) => shop.toLowerCase().contains(shopQuery),
+                            )
+                            .toList();
+                    if (shops.isEmpty) {
+                      return const Center(
+                        child: Text('No unpaid bills found.'),
+                      );
+                    }
+                    return ListView.builder(
+                      itemCount: shops.length,
+                      itemBuilder: (context, index) {
+                        final shop = shops[index];
+                        return FutureBuilder<Bill?>(
+                          future: firestore.fetchLatestUnpaidBillForShop(shop),
+                          builder: (context, billSnap) {
+                            if (!billSnap.hasData)
+                              return const SizedBox.shrink();
+                            final bill = billSnap.data!;
+                            return ListTile(
+                              title: Text(
+                                shop,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: Text(
+                                'Balance : \$ ${bill.total.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.red,
+                                ),
+                              ),
+                              trailing: Text(
+                                DateFormat(
+                                  'dd MMM yy',
+                                ).format(bill.createdAt.toDate()),
+                              ),
+                              onTap: () async {
+                                await showLoadingWhile(
+                                  context,
+                                  ref
+                                      .read(firestoreServiceProvider)
+                                      .fetchUnpaidBillsForShop(shop),
+                                );
+
+                                _showBillDialog(context, bill);
+                              },
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: TextField(
+                  cursorColor: Color.fromARGB(255, 2, 113, 192),
                   controller: _billSearchController,
                   decoration: const InputDecoration(
                     labelText: 'Enter Bill Number',
                     prefixIcon: Icon(Icons.receipt_long),
+
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(
+                        color: Color.fromARGB(255, 2, 113, 192),
+                      ),
+                    ),
                   ),
                   onSubmitted: (val) => setState(() => billSearch = val.trim()),
                 ),
@@ -171,7 +280,9 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                             if (snapshot.connectionState ==
                                 ConnectionState.waiting) {
                               return const Center(
-                                child: CircularProgressIndicator(),
+                                child: CircularProgressIndicator(
+                                  color: Color.fromARGB(255, 2, 113, 192),
+                                ),
                               );
                             }
                             if (!snapshot.hasData) {
@@ -186,7 +297,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                   title: Text('Bill #: ${bill.billNumber}'),
                                   subtitle: Text('Shop: ${bill.shopName}'),
                                   trailing: Text(
-                                    '₹${bill.currentPurchaseTotal.toStringAsFixed(2)}',
+                                    '\$${bill.currentPurchaseTotal.toStringAsFixed(2)}',
                                   ),
 
                                   onTap: () {
@@ -209,11 +320,6 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
     final unpaidBills = await ref
         .read(firestoreServiceProvider)
         .fetchUnpaidBillsForShop(bill.shopName);
-
-    final totalUnpaid = unpaidBills.fold<double>(
-      0.0,
-      (sum, b) => sum + b.currentPurchaseTotal,
-    );
 
     showDialog(
       barrierDismissible: false,
@@ -288,7 +394,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                             ).format(b.createdAt.toDate()),
                           ),
                           trailing: Text(
-                            '₹${b.currentPurchaseTotal.toStringAsFixed(2)}',
+                            '\$${b.currentPurchaseTotal.toStringAsFixed(2)}',
                           ),
                         );
                       },
@@ -299,7 +405,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       Text(
-                        'Total Unpaid : ₹ ${totalUnpaid.toStringAsFixed(2)}',
+                        'Total Unpaid : \$ ${bill.total.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.red,
@@ -318,107 +424,170 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                   style: TextStyle(color: Colors.blue),
                 ),
               ),
-              if (!bill.isPaid)
-                TextButton(
-                  onPressed: () async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      barrierDismissible: false,
-                      builder:
-                          (ctx) => AlertDialog(
-                            backgroundColor: const Color(0xFFE3F2FD),
-                            title: const Text('Mark as Paid?'),
-                            content: const Text(
-                              'Are you sure you want to mark this bill as paid?',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(ctx).pop(false),
-                                child: const Text(
-                                  'Cancel',
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                              ),
-                              ElevatedButton(
-                                style: ButtonStyle(
-                                  backgroundColor: WidgetStatePropertyAll(
-                                    Colors.white,
-                                  ),
-                                ),
-                                onPressed: () => Navigator.of(ctx).pop(true),
-                                child: const Text(
-                                  'Confirm',
-                                  style: TextStyle(color: Color(0xFF00A105)),
-                                ),
-                              ),
-                            ],
-                          ),
-                    );
-                    if (confirmed == true) {
-                      await ref
-                          .read(firestoreServiceProvider)
-                          .updateBillPaymentStatus(bill.id, true);
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Marked as Paid')),
-                      );
-                      setState(() {});
-                    }
-                  },
-                  child: const Text(
-                    'Mark as Paid',
-                    style: TextStyle(color: Color(0xFF00A105)),
-                  ),
-                ),
+              // if (!bill.isPaid)
+              //   TextButton(
+              //     onPressed: () async {
+              //       final confirmed = await showDialog<bool>(
+              //         context: context,
+              //         barrierDismissible: false,
+              //         builder:
+              //             (ctx) => AlertDialog(
+              //               backgroundColor: const Color(0xFFE3F2FD),
+              //               title: const Text('Mark as Paid?'),
+              //               content: const Text(
+              //                 'Are you sure you want to mark this bill as paid?',
+              //               ),
+              //               actions: [
+              //                 TextButton(
+              //                   onPressed: () => Navigator.of(ctx).pop(false),
+              //                   child: const Text(
+              //                     'Cancel',
+              //                     style: TextStyle(color: Colors.red),
+              //                   ),
+              //                 ),
+              //                 ElevatedButton(
+              //                   style: ButtonStyle(
+              //                     backgroundColor: WidgetStatePropertyAll(
+              //                       Colors.white,
+              //                     ),
+              //                   ),
+              //                   onPressed: () => Navigator.of(ctx).pop(true),
+              //                   child: const Text(
+              //                     'Confirm',
+              //                     style: TextStyle(color: Color(0xFF00A105)),
+              //                   ),
+              //                 ),
+              //               ],
+              //             ),
+              //       );
+              //       if (confirmed == true) {
+              //         await ref
+              //             .read(firestoreServiceProvider)
+              //             .updateBillPaymentStatus(bill.id, true);
+              //         Navigator.pop(context);
+              //         ScaffoldMessenger.of(context).showSnackBar(
+              //           const SnackBar(content: Text('Marked as Paid')),
+              //         );
+              //         setState(() {});
+              //       }
+              //     },
+              //     child: const Text(
+              //       'Mark as Paid',
+              //       style: TextStyle(color: Color(0xFF00A105)),
+              //     ),
+              //   ),
               TextButton(
                 onPressed: () async {
+                  final TextEditingController amountController =
+                      TextEditingController();
+
                   final confirmed = await showDialog<bool>(
-                    barrierDismissible: false,
                     context: context,
+                    barrierDismissible: false,
                     builder:
                         (ctx) => AlertDialog(
                           backgroundColor: const Color(0xFFE3F2FD),
-                          title: const Text('Delete Bill?'),
-                          content: const Text(
-                            'This action cannot be undone. Proceed?',
+                          title: const Text('Enter Payment Amount'),
+                          content: TextField(
+                            cursorColor: Color.fromARGB(255, 2, 113, 192),
+                            controller: amountController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: 'Amount Paid',
+                              border: UnderlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: Color.fromARGB(255, 2, 113, 192),
+                                ),
+                              ),
+                            ),
                           ),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text(
-                                'Cancel',
-                                style: TextStyle(color: Colors.blue),
-                              ),
+                              child: const Text('Cancel'),
                             ),
                             ElevatedButton(
-                              style: ButtonStyle(
+                              style: const ButtonStyle(
                                 backgroundColor: WidgetStatePropertyAll(
                                   Colors.white,
                                 ),
                               ),
                               onPressed: () => Navigator.of(ctx).pop(true),
                               child: const Text(
-                                'Delete',
-                                style: TextStyle(color: Colors.red),
+                                'Submit',
+                                style: TextStyle(color: Color(0xFF00A105)),
                               ),
                             ),
                           ],
                         ),
                   );
+
                   if (confirmed == true) {
-                    await ref
-                        .read(firestoreServiceProvider)
-                        .deleteBill(bill.id);
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Bill deleted')),
+                    final enteredAmount = double.tryParse(
+                      amountController.text.trim(),
                     );
+                    if (enteredAmount == null || enteredAmount <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Invalid amount entered.'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    double remaining = enteredAmount;
+
+                    for (final b in unpaidBills) {
+                      if (remaining >= b.total) {
+                        await showLoadingWhile(
+                          context,
+                          ref
+                              .read(firestoreServiceProvider)
+                              .markAllUnpaidBillsAsPaid(b.shopName),
+                        );
+                        remaining -= b.total;
+                      } else {
+                        final newTotal = b.total - remaining;
+                        await showLoadingWhile(
+                          context,
+                          ref
+                              .read(firestoreServiceProvider)
+                              .markUnpaidBillsAsPaidAndMakeLatestAsUnpaid(
+                                b.shopName,
+                                newTotal,
+                              ),
+                        );
+
+                        remaining = 0;
+                        break;
+                      }
+                    }
+
+                    if (remaining > 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Overpaid by \$${remaining.toStringAsFixed(2)}',
+                          ),
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Payment applied successfully.'),
+                        ),
+                      );
+                    }
+
+                    Navigator.pop(context);
                     setState(() {});
                   }
                 },
                 child: const Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.red),
+                  'Mark as Paid',
+                  style: TextStyle(color: Color(0xFF00A105)),
                 ),
               ),
             ],
@@ -483,9 +652,9 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                           dense: true,
                           title: Text(item.name),
                           subtitle: Text(
-                            'Qty: ${item.quantity} x ₹${item.price.toStringAsFixed(2)}',
+                            'Qty: ${item.quantity} x \$${item.price.toStringAsFixed(2)}',
                           ),
-                          trailing: Text('₹${item.total.toStringAsFixed(2)}'),
+                          trailing: Text('\$${item.total.toStringAsFixed(2)}'),
                         );
                       },
                       separatorBuilder: (_, __) => const Divider(),
@@ -502,7 +671,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                           children: [
                             Text('Current Total :'),
                             Text(
-                              '₹ ${bill.currentPurchaseTotal.toStringAsFixed(2)}',
+                              '\$ ${bill.currentPurchaseTotal.toStringAsFixed(2)}',
                             ),
                           ],
                         ),
@@ -510,22 +679,31 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text('Previous Unpaid :'),
-                            Text('₹ ${bill.previousUnpaid.toStringAsFixed(2)}'),
+                            Text(
+                              '\$ ${bill.previousUnpaid.toStringAsFixed(2)}',
+                            ),
+                          ],
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Paid :'),
+                            Text('\$ ${bill.paidAmount.toStringAsFixed(2)}'),
                           ],
                         ),
                         // Text(
-                        //   'Paid Amount: ₹${bill.paidAmount.toStringAsFixed(2)}',
+                        //   'Paid Amount: \$ ${bill.paidAmount.toStringAsFixed(2)}',
                         // ),
                         const SizedBox(height: 4),
                         // Text(
-                        //   'Total Due: ₹${bill.remainingUnpaid.toStringAsFixed(2)}',
+                        //   'Total Due: \$ ${bill.remainingUnpaid.toStringAsFixed(2)}',
                         //   style: const TextStyle(
                         //     color: Colors.red,
                         //     fontWeight: FontWeight.bold,
                         //   ),
                         // ),
                         // Text(
-                        //   'Total : ₹${bill.previousUnpaid.toStringAsFixed(2)}',
+                        //   'Total : \$ ${bill.previousUnpaid.toStringAsFixed(2)}',
                         // ),
                       ],
                     ),

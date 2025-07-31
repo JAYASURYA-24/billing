@@ -24,7 +24,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   }) {
     final _nameController = TextEditingController(text: product?.name ?? '');
     final _priceController = TextEditingController(
-      text: product?.price.toString() ?? '',
+      // text: product?.price.toString() ?? '',
     );
     final isEdit = product != null;
 
@@ -51,21 +51,21 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _priceController,
-                  cursorColor: const Color.fromARGB(255, 2, 113, 192),
-                  decoration: const InputDecoration(
-                    labelText: 'Price',
-                    labelStyle: TextStyle(color: Colors.black),
-                    focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Color.fromARGB(255, 2, 113, 192),
-                      ),
-                    ),
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
+                // const SizedBox(height: 10),
+                // TextFormField(
+                //   controller: _priceController,
+                //   cursorColor: const Color.fromARGB(255, 2, 113, 192),
+                //   decoration: const InputDecoration(
+                //     labelText: 'Price',
+                //     labelStyle: TextStyle(color: Colors.black),
+                //     focusedBorder: UnderlineInputBorder(
+                //       borderSide: BorderSide(
+                //         color: Color.fromARGB(255, 2, 113, 192),
+                //       ),
+                //     ),
+                //   ),
+                //   keyboardType: TextInputType.number,
+                // ),
               ],
             ),
             actions: [
@@ -86,14 +86,14 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                 ),
                 onPressed: () {
                   final name = _nameController.text.trim();
-                  final price =
-                      double.tryParse(_priceController.text.trim()) ?? 0;
-                  if (name.isEmpty || price <= 0) return;
+                  // final price =
+                  //     double.tryParse(_priceController.text.trim()) ?? 0;
+                  if (name.isEmpty) return;
 
                   final newProduct = Product(
                     id: product?.id ?? '',
                     name: name,
-                    price: price,
+                    // price: price,
                   );
 
                   if (isEdit) {
@@ -379,9 +379,9 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                                     ),
                                     child: ListTile(
                                       title: Text(product.name),
-                                      subtitle: Text(
-                                        '₹ ${product.price.toStringAsFixed(2)}',
-                                      ),
+                                      // subtitle: Text(
+                                      //   '\$ ${product.price.toStringAsFixed(2)}',
+                                      // ),
                                       trailing: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
@@ -428,10 +428,18 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                         children: [
                           Expanded(
                             child: TextField(
+                              cursorColor: Color.fromARGB(255, 2, 113, 192),
                               decoration: InputDecoration(
                                 hintText: 'Search shop by name...',
                                 prefixIcon: const Icon(Icons.search),
                                 filled: true,
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: const BorderSide(
+                                    color: Color.fromARGB(255, 2, 113, 192),
+                                    width: 2,
+                                  ),
+                                ),
                                 fillColor: Colors.white,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(20),

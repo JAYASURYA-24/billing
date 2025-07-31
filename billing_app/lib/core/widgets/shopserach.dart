@@ -5,15 +5,19 @@ import 'package:billing/features/providers/shop_provider.dart';
 
 class ShopDropdown extends ConsumerStatefulWidget {
   final Function(Shop) onSelected;
+  final TextEditingController controller;
 
-  const ShopDropdown({super.key, required this.onSelected});
+  const ShopDropdown({
+    super.key,
+    required this.onSelected,
+    required this.controller,
+  });
 
   @override
   ConsumerState<ShopDropdown> createState() => _ShopDropdownState();
 }
 
 class _ShopDropdownState extends ConsumerState<ShopDropdown> {
-  final TextEditingController _mainController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   bool _dropdownOpen = false;
   List<Shop> _filteredShops = [];
@@ -43,7 +47,6 @@ class _ShopDropdownState extends ConsumerState<ShopDropdown> {
 
   @override
   void dispose() {
-    _mainController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -69,7 +72,9 @@ class _ShopDropdownState extends ConsumerState<ShopDropdown> {
               onTap: () => setState(() => _dropdownOpen = !_dropdownOpen),
               child: AbsorbPointer(
                 child: TextField(
-                  controller: _mainController..text = selectedShop?.name ?? '',
+                  controller:
+                      widget.controller..text = selectedShop?.name ?? '',
+
                   decoration: InputDecoration(
                     labelText: 'Select Shop',
                     border: OutlineInputBorder(
@@ -132,7 +137,7 @@ class _ShopDropdownState extends ConsumerState<ShopDropdown> {
                                     ),
                                     title: Text(shop.name),
                                     onTap: () {
-                                      _mainController.text = shop.name;
+                                      widget.controller.text = shop.name;
                                       _dropdownOpen = false;
                                       _searchController.clear();
                                       ref

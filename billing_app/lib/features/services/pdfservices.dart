@@ -14,12 +14,7 @@ Future<void> generateAndOpenPdf(Bill bill) async {
     (sum, item) => sum + item.total,
   );
   final currentBilltotal = grandTotal;
-  final totalPayable = currentBilltotal + bill.previousUnpaid;
-  print("JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ$grandTotal");
-  print(
-    "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk$totalPayable",
-  );
-  final balance = bill.isPaid ? 0.0 : (totalPayable - bill.paidAmount);
+  final totalPayable = bill.total;
 
   // Load custom font
   final fontData = await rootBundle.load('assets/fonts/NotoSans-Regular.ttf');

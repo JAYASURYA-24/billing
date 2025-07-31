@@ -2,11 +2,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:animated_notch_bottom_bar/animated_notch_bottom_bar/animated_notch_bottom_bar.dart';
+
 import 'package:billing/features/services/firebase_options.dart';
 import 'package:billing/features/screens/billing_screen.dart';
 import 'package:billing/features/screens/pending_payment.dart';
 import 'package:billing/features/screens/prduct_admin_screen.dart';
-import 'package:animated_notch_bottom_bar/animated_notch_bottom_bar/animated_notch_bottom_bar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +31,7 @@ class BillingApp extends StatelessWidget {
       title: 'Billing System',
       theme: ThemeData(
         primarySwatch: Colors.teal,
-        scaffoldBackgroundColor: const Color(0xFFE3F2FD), // Light blue
+        scaffoldBackgroundColor: const Color(0xFFE3F2FD),
       ),
       debugShowCheckedModeBanner: false,
       home: const MainNavigationScreen(),
@@ -57,6 +59,26 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     BillExplorerScreen(),
   ];
 
+  late final Connectivity _connectivity;
+  late final Stream<List<ConnectivityResult>> _connectivityStream;
+  bool _isOffline = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _connectivity = Connectivity();
+    _connectivityStream = _connectivity.onConnectivityChanged;
+
+    _connectivityStream.listen((results) {
+      final isNowOffline = results.every((r) => r == ConnectivityResult.none);
+      if (isNowOffline != _isOffline) {
+        setState(() {
+          _isOffline = isNowOffline;
+        });
+      }
+    });
+  }
+
   void _onPageChanged(int index) {
     setState(() {
       _currentIndex = index;
@@ -77,6 +99,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     return SafeArea(
       top: false,
       child: Scaffold(
+        appBar:
+            _isOffline
+                ? AppBar(
+                  backgroundColor: Colors.red,
+                  title: const Text(
+                    'No Internet Connection',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  centerTitle: true,
+                )
+                : null,
         body:
             isDesktop
                 ? Row(
@@ -102,8 +135,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     ),
                     Expanded(
                       child: PageView(
-                        physics: NeverScrollableScrollPhysics(),
                         controller: _pageController,
+                        physics: const NeverScrollableScrollPhysics(),
                         onPageChanged: _onPageChanged,
                         children: _screens,
                       ),
@@ -112,7 +145,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 )
                 : PageView(
                   controller: _pageController,
-                  physics: NeverScrollableScrollPhysics(),
+                  physics: const NeverScrollableScrollPhysics(),
                   onPageChanged: _onPageChanged,
                   children: _screens,
                 ),

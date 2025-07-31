@@ -74,7 +74,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     );
   }
 
-  void _previewBillDialog() async {
+  void _previewBillBottomSheet() async {
     final shopName = shopNameController.text.trim();
     final (previewBill, _) = await showLoadingWhile(
       context,
@@ -85,203 +85,278 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
     bool tempPaid = true;
     final paidAmountController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
 
-    showDialog(
-      barrierDismissible: false,
+    showModalBottomSheet(
+      isScrollControlled: true,
       context: context,
+      backgroundColor: const Color(0xFFE3F2FD),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFFE3F2FD),
-              title: const Text('Preview Bill'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Shop: $shopName',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 16,
+            right: 16,
+            top: 24,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              paidAmountController.addListener(() {
+                final paidAmount =
+                    double.tryParse(paidAmountController.text.trim()) ?? 0.0;
+                final isPaid = paidAmount >= previewBill.total;
+                if (tempPaid != isPaid) {
+                  setState(() {
+                    tempPaid = isPaid;
+                  });
+                }
+              });
 
-                    if (previewBill.previousUnpaid == 0)
-                      const Text(
-                        'No previous pending bills...',
-                        style: TextStyle(color: Color.fromARGB(255, 0, 161, 5)),
-                      )
-                    else
-                      Text(
-                        '₹${previewBill.previousUnpaid.toStringAsFixed(2)} unpaid from last bill',
-                        style: const TextStyle(color: Colors.red),
+              return SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[400],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
                       ),
+                      Text(
+                        'Shop: $shopName',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
 
-                    const Divider(),
+                      if (previewBill.previousUnpaid == 0)
+                        const Text(
+                          'No previous pending bills...',
+                          style: TextStyle(
+                            color: Color.fromARGB(255, 0, 161, 5),
+                          ),
+                        )
+                      else
+                        Text(
+                          '\$${previewBill.previousUnpaid.toStringAsFixed(2)} unpaid from last bill',
+                          style: const TextStyle(color: Colors.red),
+                        ),
 
-                    const Text(
-                      'Current Purchase:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 200, // adjust height as needed
-                      child: ListView.builder(
-                        itemCount: previewBill.items.length,
-                        itemBuilder: (context, index) {
-                          final item = previewBill.items[index];
-                          return ListTile(
-                            visualDensity: VisualDensity(vertical: -4),
-                            dense: true,
-                            title: Text('${item.name} x ${item.quantity}'),
-                            trailing: Text(
-                              '₹${(item.price * item.quantity).toStringAsFixed(2)}',
+                      const Divider(),
+                      const Text(
+                        'Current Purchase:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 200,
+                        child: ListView.builder(
+                          itemCount: previewBill.items.length,
+                          itemBuilder: (context, index) {
+                            final item = previewBill.items[index];
+                            return ListTile(
+                              dense: true,
+                              visualDensity: VisualDensity(vertical: -4),
+                              title: Text('${item.name} x ${item.quantity}'),
+                              trailing: Text(
+                                '\$${(item.price * item.quantity).toStringAsFixed(2)}',
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const Divider(),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Previous Unpaid : ',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                          Text(
+                            '\$ ${previewBill.previousUnpaid.toStringAsFixed(2)}',
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Current Purchase : ',
+                            style: TextStyle(
+                              color: Color.fromARGB(255, 2, 113, 192),
                             ),
-                          );
+                          ),
+                          Text(
+                            '\$ ${previewBill.currentPurchaseTotal.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: Color.fromARGB(255, 2, 113, 192),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Grand Total : ',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          Text(
+                            '\$ ${previewBill.total.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      TextFormField(
+                        controller: paidAmountController,
+                        keyboardType: TextInputType.number,
+                        cursorColor: Color.fromARGB(255, 2, 113, 192),
+                        decoration: const InputDecoration(
+                          labelText: 'Enter Paid Amount (required)',
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(20)),
+                            borderSide: BorderSide(
+                              color: Color.fromARGB(255, 2, 113, 192),
+                              width: 2,
+                            ),
+                          ),
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(20)),
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Paid amount is required';
+                          }
+
+                          final parsed = double.tryParse(value.trim());
+                          if (parsed == null) {
+                            return 'Enter a valid number';
+                          }
+
+                          if (parsed > previewBill.total) {
+                            return 'Paid amount cannot exceed grand total';
+                          }
+
+                          return null;
                         },
                       ),
-                    ),
-                    const Divider(),
+                      const SizedBox(height: 16),
 
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Previous Unpaid : ',
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                        Text(
-                          "₹ ${previewBill.previousUnpaid.toStringAsFixed(2)}",
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Current Purchase : ',
-                          style: const TextStyle(
-                            color: const Color.fromARGB(255, 2, 113, 192),
+                      Row(
+                        children: [
+                          const Text('Payment Status:'),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Radio<bool>(
+                                  activeColor: Colors.green,
+                                  value: true,
+                                  groupValue: tempPaid,
+                                  onChanged: (val) {
+                                    if (val != null)
+                                      setState(() => tempPaid = val);
+                                  },
+                                ),
+                                const Text('Paid'),
+                                Radio<bool>(
+                                  activeColor: Colors.red,
+                                  value: false,
+                                  groupValue: tempPaid,
+                                  onChanged: (val) {
+                                    if (val != null)
+                                      setState(() => tempPaid = val);
+                                  },
+                                ),
+                                const Text('Unpaid'),
+                              ],
+                            ),
                           ),
-                        ),
-                        Text(
-                          '₹ ${previewBill.currentPurchaseTotal.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            color: const Color.fromARGB(255, 2, 113, 192),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Grand Total : ',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                            fontSize: 18,
-                          ),
-                        ),
-                        Text(
-                          '₹ ${previewBill.total.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // 🔹 Paid Amount TextField
-                    TextField(
-                      controller: paidAmountController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Enter Paid Amount (if any)',
-                        border: OutlineInputBorder(),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 20),
 
-                    // 🔹 Payment Status
-                    Row(
-                      children: [
-                        const Text('Payment Status:'),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Radio<bool>(
-                                activeColor: Colors.green,
-                                value: true,
-                                groupValue: tempPaid,
-                                onChanged:
-                                    (val) => setState(() => tempPaid = true),
-                              ),
-                              const Text('Paid'),
-                              Radio<bool>(
-                                activeColor: Colors.red,
-                                value: false,
-                                groupValue: tempPaid,
-                                onChanged:
-                                    (val) => setState(() => tempPaid = false),
-                              ),
-                              const Text('Unpaid'),
-                            ],
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(color: Colors.red),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(color: Colors.red),
+                          ElevatedButton(
+                            style: const ButtonStyle(
+                              backgroundColor: WidgetStatePropertyAll(
+                                Colors.white,
+                              ),
+                            ),
+                            onPressed: () async {
+                              if (!formKey.currentState!.validate()) return;
+
+                              Navigator.pop(context);
+                              shopNameController.clear();
+
+                              final paidAmount =
+                                  double.tryParse(
+                                    paidAmountController.text.trim(),
+                                  ) ??
+                                  0.0;
+                              final (finalBill, _) = await ref
+                                  .read(billingProvider.notifier)
+                                  .generateBill(
+                                    shopName,
+                                    tempPaid,
+                                    paidAmount: paidAmount,
+                                  );
+                              ref.read(selectedShopProvider.notifier).state =
+                                  null;
+
+                              await generateAndOpenPdf(finalBill);
+                            },
+                            child: const Text(
+                              'Generate PDF',
+                              style: TextStyle(
+                                color: Color.fromARGB(255, 2, 113, 192),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                    ],
                   ),
                 ),
-                ElevatedButton(
-                  style: ButtonStyle(
-                    backgroundColor: WidgetStatePropertyAll(Colors.white),
-                  ),
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    shopNameController.clear();
-
-                    final paidAmount =
-                        double.tryParse(paidAmountController.text.trim()) ??
-                        0.0;
-
-                    final (finalBill, _) = await ref
-                        .read(billingProvider.notifier)
-                        .generateBill(
-                          shopName,
-                          tempPaid,
-                          paidAmount: paidAmount,
-                        );
-                    ref.read(selectedShopProvider.notifier).state = null;
-
-                    await generateAndOpenPdf(finalBill);
-                  },
-                  child: const Text(
-                    'Generate PDF',
-                    style: TextStyle(
-                      color: const Color.fromARGB(255, 2, 113, 192),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
@@ -290,94 +365,246 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
   void _showProductSelectionDialog() {
     final productAsync = ref.read(productsProvider);
     final Map<String, TextEditingController> quantityControllers = {};
+    final Map<String, TextEditingController> priceControllers = {};
+    final searchController = TextEditingController();
 
     showDialog(
       context: context,
-      barrierDismissible:
-          false, // Dialog stays open until user cancels or submits
+      barrierDismissible: false,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFFE3F2FD),
-          title: const Text('Select Products & Quantities'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 500,
-            child: productAsync.when(
-              data: (products) {
-                for (var product in products) {
-                  quantityControllers[product.id] =
-                      TextEditingController(); // No prefilled value
-                }
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Dialog(
+                insetPadding: EdgeInsets.zero, // removes default margin
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE3F2FD),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  width: MediaQuery.of(context).size.width,
+                  // full screen width
+                  height: MediaQuery.of(context).size.height * 0.8,
+                  padding: const EdgeInsets.all(16),
 
-                return ListView.separated(
-                  itemCount: products.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final product = products[index];
-                    final controller = quantityControllers[product.id]!;
-
-                    return ListTile(
-                      title: Text(product.name),
-                      trailing: SizedBox(
-                        width: 80,
-                        child: TextField(
-                          cursorColor: const Color.fromARGB(255, 2, 113, 192),
-                          controller: controller,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            suffix: Text(
-                              'kg',
-                              style: TextStyle(color: Colors.black),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Select Products & Qty & Price',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        cursorColor: const Color.fromARGB(255, 2, 113, 192),
+                        controller: searchController,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'Search product by name...',
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: const BorderSide(
+                              color: Color.fromARGB(255, 2, 113, 192),
+                              width: 2,
                             ),
-
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 10,
-                            ),
-
-                            focusedBorder: UnderlineInputBorder(
-                              borderSide: BorderSide(
-                                color: const Color.fromARGB(255, 2, 113, 192),
-                              ),
-                            ),
+                          ),
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
                           ),
                         ),
                       ),
-                    );
-                  },
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => const Text('Failed to load products'),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.red)),
-            ),
-            ElevatedButton(
-              style: ButtonStyle(
-                backgroundColor: WidgetStatePropertyAll(Colors.white),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: productAsync.when(
+                          data: (products) {
+                            // Setup controllers
+                            for (var product in products) {
+                              quantityControllers.putIfAbsent(
+                                product.id,
+                                () => TextEditingController(),
+                              );
+                              priceControllers.putIfAbsent(
+                                product.id,
+                                () => TextEditingController(),
+                              );
+                            }
+
+                            final filteredProducts =
+                                products
+                                    .where(
+                                      (p) => p.name.toLowerCase().contains(
+                                        searchController.text.toLowerCase(),
+                                      ),
+                                    )
+                                    .toList();
+
+                            if (filteredProducts.isEmpty) {
+                              return const Center(
+                                child: Text('No products found'),
+                              );
+                            }
+
+                            return ListView.separated(
+                              itemCount: filteredProducts.length,
+                              separatorBuilder:
+                                  (_, __) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final product = filteredProducts[index];
+                                final qtyController =
+                                    quantityControllers[product.id]!;
+                                final priceController =
+                                    priceControllers[product.id]!;
+
+                                return ListTile(
+                                  title: Text(product.name),
+                                  trailing: SizedBox(
+                                    width: 200,
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextField(
+                                            cursorColor: const Color.fromARGB(
+                                              255,
+                                              2,
+                                              113,
+                                              192,
+                                            ),
+                                            controller: qtyController,
+                                            keyboardType: TextInputType.number,
+                                            decoration: const InputDecoration(
+                                              suffix: Text('Qty'),
+                                              contentPadding:
+                                                  EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 10,
+                                                  ),
+                                              focusedBorder:
+                                                  UnderlineInputBorder(
+                                                    borderSide: BorderSide(
+                                                      color: Color.fromARGB(
+                                                        255,
+                                                        2,
+                                                        113,
+                                                        192,
+                                                      ),
+                                                    ),
+                                                  ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: TextField(
+                                            cursorColor: const Color.fromARGB(
+                                              255,
+                                              2,
+                                              113,
+                                              192,
+                                            ),
+                                            controller: priceController,
+                                            keyboardType: TextInputType.number,
+                                            decoration: const InputDecoration(
+                                              suffix: Text('\$'),
+                                              contentPadding:
+                                                  EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 10,
+                                                  ),
+                                              focusedBorder:
+                                                  UnderlineInputBorder(
+                                                    borderSide: BorderSide(
+                                                      color: Color.fromARGB(
+                                                        255,
+                                                        2,
+                                                        113,
+                                                        192,
+                                                      ),
+                                                    ),
+                                                  ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                          loading:
+                              () => const Center(
+                                child: CircularProgressIndicator(
+                                  color: Color.fromARGB(255, 2, 113, 192),
+                                ),
+                              ),
+                          error:
+                              (_, __) => const Center(
+                                child: Text('Failed to load products'),
+                              ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton(
+                            style: const ButtonStyle(
+                              backgroundColor: WidgetStatePropertyAll(
+                                Colors.white,
+                              ),
+                            ),
+                            onPressed: () {
+                              final products =
+                                  ref.read(productsProvider).asData?.value ??
+                                  [];
+                              for (var product in products) {
+                                final qtyStr =
+                                    quantityControllers[product.id]?.text
+                                        .trim() ??
+                                    '0';
+                                final prcStr =
+                                    priceControllers[product.id]?.text.trim() ??
+                                    '0';
+                                final qty = int.tryParse(qtyStr) ?? 0;
+                                final prc = double.tryParse(prcStr) ?? 0;
+                                if (qty > 0) {
+                                  ref
+                                      .read(billingProvider.notifier)
+                                      .addItem(product, qty, prc);
+                                }
+                              }
+                              Navigator.pop(context);
+                            },
+                            child: const Text(
+                              'Done',
+                              style: TextStyle(
+                                color: Color.fromARGB(255, 0, 161, 5),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              onPressed: () {
-                final products = ref.read(productsProvider).asData?.value ?? [];
-                for (var product in products) {
-                  final qtyStr =
-                      quantityControllers[product.id]?.text.trim() ?? '0';
-                  final qty = int.tryParse(qtyStr) ?? 0;
-                  if (qty > 0) {
-                    ref.read(billingProvider.notifier).addItem(product, qty);
-                  }
-                }
-                Navigator.pop(context); // Close dialog after all added
-              },
-              child: const Text(
-                'Done',
-                style: TextStyle(color: Color.fromARGB(255, 0, 161, 5)),
-              ),
-            ),
-          ],
+            );
+          },
         );
       },
     );
@@ -408,6 +635,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                 ref.invalidate(billingProvider);
                 ref.invalidate(productsProvider);
                 ref.invalidate(shopNamesProvider);
+                ref.invalidate(selectedShopProvider);
 
                 shopNameController.clear();
               },
@@ -422,6 +650,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
               shopNamesAsync.when(
                 data: (shopList) {
                   return ShopDropdown(
+                    controller: shopNameController,
                     // shopList: shopList,
                     onSelected: (shop) {
                       setState(() {
@@ -431,7 +660,10 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                     },
                   );
                 },
-                loading: () => const CircularProgressIndicator(),
+                loading:
+                    () => const CircularProgressIndicator(
+                      color: Color.fromARGB(255, 2, 113, 192),
+                    ),
                 error: (e, _) => Text('Error loading shops: $e'),
               ),
 
@@ -461,7 +693,9 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                       backgroundColor: WidgetStatePropertyAll(Colors.white),
                     ),
                     onPressed: () {
-                      _previewBillDialog(); // only proceed if form is valid
+                      _previewBillBottomSheet();
+
+                      // only proceed if form is valid
                     },
 
                     icon: const Icon(
@@ -497,13 +731,13 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                               visualDensity: VisualDensity(vertical: -3),
                               title: Text('${item.name}  x  ${item.quantity}'),
                               subtitle: Text(
-                                '₹${item.price.toStringAsFixed(2)}',
+                                '\$${item.price.toStringAsFixed(2)}',
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    '₹${(item.price * item.quantity).toStringAsFixed(2)}',
+                                    '\$${(item.price * item.quantity).toStringAsFixed(2)}',
                                   ),
                                   const SizedBox(width: 10),
                                   IconButton(
@@ -541,7 +775,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                             style: TextStyle(fontSize: 20),
                           ),
                           Text(
-                            'Total : ₹ ${bill.total.toStringAsFixed(2)}',
+                            'Total : \$ ${bill.total.toStringAsFixed(2)}',
                             style: TextStyle(fontSize: 20),
                           ),
                         ],

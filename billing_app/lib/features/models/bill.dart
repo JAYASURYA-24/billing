@@ -58,7 +58,6 @@ class Bill {
   final double currentPurchaseTotal;
   final double previousUnpaid;
   final double paidAmount;
-  final double remainingUnpaid;
 
   Bill({
     required this.id,
@@ -71,7 +70,6 @@ class Bill {
     required this.currentPurchaseTotal,
     required this.previousUnpaid,
     required this.paidAmount,
-    required this.remainingUnpaid,
   });
 
   /// ✅ Convert model to Firestore Map (excluding `id`)
@@ -85,6 +83,7 @@ class Bill {
       'currentPurchaseTotal': currentPurchaseTotal,
       'previousUnpaid': previousUnpaid,
       'paidAmount': paidAmount,
+
       'items': items.map((e) => e.toMap()).toList(),
     };
   }
@@ -111,8 +110,8 @@ class Bill {
           (map['items'] as List<dynamic>)
               .map((e) => BillItem.fromMap(Map<String, dynamic>.from(e)))
               .toList(),
+
       paidAmount: map['paidAmount'] ?? 0.0,
-      remainingUnpaid: map['remainingUnpaid'] ?? 0.0,
     );
   }
 
@@ -141,7 +140,6 @@ class Bill {
       currentPurchaseTotal: currentPurchaseTotal ?? this.currentPurchaseTotal,
       paidAmount: paidAmount ?? this.paidAmount,
       previousUnpaid: previousUnpaid ?? this.previousUnpaid,
-      remainingUnpaid: remainingUnpaid ?? this.remainingUnpaid,
     );
   }
 }

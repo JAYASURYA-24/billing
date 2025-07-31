@@ -39,11 +39,10 @@ class BillingNotifier extends StateNotifier<Bill> {
           currentPurchaseTotal: 0.0,
           previousUnpaid: 0.0,
           paidAmount: 0.0,
-          remainingUnpaid: 0.0,
         ),
       );
 
-  void addItem(Product product, int quantity) {
+  void addItem(Product product, int quantity, double price) {
     final existing = state.items.firstWhere(
       (item) => item.productId == product.id,
       orElse: () => BillItem(productId: '', name: '', price: 0, quantity: 0),
@@ -66,7 +65,7 @@ class BillingNotifier extends StateNotifier<Bill> {
               BillItem(
                 productId: product.id,
                 name: product.name,
-                price: product.price,
+                price: price,
                 quantity: quantity,
               ),
             ];
@@ -132,7 +131,7 @@ class BillingNotifier extends StateNotifier<Bill> {
 
         previousUnpaid = unpaidBills.fold(
           0.0,
-          (sum, bill) => sum + bill.currentPurchaseTotal,
+          (sum, bill) => sum + bill.currentPurchaseTotal - bill.paidAmount,
         );
 
         for (final bill in unpaidBills) {
@@ -144,7 +143,7 @@ class BillingNotifier extends StateNotifier<Bill> {
 
         previousUnpaid = unpaidBills.fold(
           0.0,
-          (sum, bill) => sum + bill.currentPurchaseTotal,
+          (sum, bill) => sum + bill.currentPurchaseTotal - bill.paidAmount,
         );
 
         displayUnpaidBills = unpaidBills;
@@ -153,10 +152,9 @@ class BillingNotifier extends StateNotifier<Bill> {
       final unpaidBills = await firestore.fetchUnpaidBillsForShop(shopName);
       unpaidBills.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-      previousUnpaid = unpaidBills.fold(
-        0.0,
-        (sum, bill) => sum + bill.currentPurchaseTotal,
-      );
+      previousUnpaid = unpaidBills.fold(0.0, (sum, bill) {
+        return sum + (bill.currentPurchaseTotal - bill.paidAmount).abs();
+      });
 
       displayUnpaidBills = unpaidBills;
     }
@@ -173,12 +171,15 @@ class BillingNotifier extends StateNotifier<Bill> {
     // ✅ Calculate remaining unpaid
     double remainingUnpaid = 0.0;
     if (!isPaid) {
-      remainingUnpaid = baseTotal - paidAmount;
+      remainingUnpaid = (baseTotal - paidAmount).abs();
+
       if (remainingUnpaid < 0.0) remainingUnpaid = 0.0;
     }
 
     // ✅ Final total to store
-    final double finalTotal = isPaid ? 0.0 : remainingUnpaid;
+    final double finalTotal = isPaid ? baseTotal : remainingUnpaid;
+    print("unpaiddddddddddddddddddddddddddddddddddd$remainingUnpaid");
+    print("finaltotallllllllllllllllllll$finalTotal");
 
     // ✅ Create Bill object
     final bill = Bill(
@@ -192,7 +193,6 @@ class BillingNotifier extends StateNotifier<Bill> {
       currentPurchaseTotal: currentTotal,
       previousUnpaid: previousUnpaid,
       paidAmount: paidAmount,
-      remainingUnpaid: remainingUnpaid,
     );
 
     // ✅ Save bill if not a preview
@@ -211,7 +211,6 @@ class BillingNotifier extends StateNotifier<Bill> {
         currentPurchaseTotal: 0.0,
         previousUnpaid: 0.0,
         paidAmount: 0.0,
-        remainingUnpaid: 0.0,
       );
     }
 
