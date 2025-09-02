@@ -54,10 +54,14 @@ class Bill {
   final List<BillItem> items;
   final bool isPaid;
   final Timestamp createdAt;
-  final double total;
+
   final double currentPurchaseTotal;
   final double previousUnpaid;
   final double paidAmount;
+  final double balance;
+
+  final double discountAmount;
+  final double discountedTotal;
 
   Bill({
     required this.id,
@@ -66,35 +70,39 @@ class Bill {
     required this.items,
     required this.isPaid,
     required this.createdAt,
-    required this.total,
+
     required this.currentPurchaseTotal,
     required this.previousUnpaid,
     required this.paidAmount,
+    this.balance = 0.0,
+    this.discountAmount = 0.0,
+
+    this.discountedTotal = 0.0,
   });
 
-  /// ✅ Convert model to Firestore Map (excluding `id`)
   Map<String, dynamic> toMap() {
     return {
       'billNumber': billNumber,
       'shopName': shopName,
       'isPaid': isPaid,
       'createdAt': createdAt,
-      'total': total,
+
       'currentPurchaseTotal': currentPurchaseTotal,
       'previousUnpaid': previousUnpaid,
       'paidAmount': paidAmount,
+      'balance': balance,
+      'discountAmount': discountAmount,
 
+      'discountedTotal': discountedTotal,
       'items': items.map((e) => e.toMap()).toList(),
     };
   }
 
-  /// ✅ Create a Bill from a Firestore document
   factory Bill.fromFirestore(DocumentSnapshot doc) {
     final map = doc.data() as Map<String, dynamic>;
     return Bill.fromMap(map, doc.id);
   }
 
-  /// ✅ Main fromMap with optional ID (recommended to always pass ID)
   factory Bill.fromMap(Map<String, dynamic> map, [String id = '']) {
     return Bill(
       id: id,
@@ -102,7 +110,7 @@ class Bill {
       shopName: map['shopName'] ?? '',
       isPaid: map['isPaid'] is bool ? map['isPaid'] : false,
       createdAt: map['createdAt'] ?? Timestamp.now(),
-      total: (map['total'] as num?)?.toDouble() ?? 0.0,
+
       currentPurchaseTotal:
           (map['currentPurchaseTotal'] as num?)?.toDouble() ?? 0.0,
       previousUnpaid: (map['previousUnpaid'] as num?)?.toDouble() ?? 0.0,
@@ -110,8 +118,11 @@ class Bill {
           (map['items'] as List<dynamic>)
               .map((e) => BillItem.fromMap(Map<String, dynamic>.from(e)))
               .toList(),
+      paidAmount: (map['paidAmount'] as num?)?.toDouble() ?? 0.0,
+      balance: (map['balance'] as num?)?.toDouble() ?? 0.0,
+      discountAmount: (map['discountAmount'] as num?)?.toDouble() ?? 0.0,
 
-      paidAmount: map['paidAmount'] ?? 0.0,
+      discountedTotal: (map['discountedTotal'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -127,7 +138,10 @@ class Bill {
     double? currentPurchaseTotal,
     double? previousUnpaid,
     double? paidAmount,
-    double? remainingUnpaid,
+    double? balance,
+
+    double? discountAmount,
+    double? discountedTotal,
   }) {
     return Bill(
       id: id ?? this.id,
@@ -136,10 +150,14 @@ class Bill {
       items: items ?? this.items,
       isPaid: isPaid ?? this.isPaid,
       createdAt: createdAt ?? this.createdAt,
-      total: total ?? this.total,
+
       currentPurchaseTotal: currentPurchaseTotal ?? this.currentPurchaseTotal,
       paidAmount: paidAmount ?? this.paidAmount,
       previousUnpaid: previousUnpaid ?? this.previousUnpaid,
+      balance: balance ?? this.balance,
+
+      discountAmount: discountAmount ?? this.discountAmount,
+      discountedTotal: discountedTotal ?? this.discountedTotal,
     );
   }
 }

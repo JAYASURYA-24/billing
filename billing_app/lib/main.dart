@@ -1,10 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:animated_notch_bottom_bar/animated_notch_bottom_bar/animated_notch_bottom_bar.dart';
-
+import 'package:flutter/foundation.dart';
 import 'package:billing/features/services/firebase_options.dart';
 import 'package:billing/features/screens/billing_screen.dart';
 import 'package:billing/features/screens/pending_payment.dart';
@@ -13,10 +12,12 @@ import 'package:billing/features/screens/prduct_admin_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (Platform.isAndroid || Platform.isIOS) {
-    await Firebase.initializeApp();
-  } else {
+  if (kIsWeb) {
+    // Web-specific Firebase options
     await Firebase.initializeApp(options: windowsFirebaseOptions);
+  } else {
+    // Mobile/Desktop Firebase initialization
+    await Firebase.initializeApp();
   }
 
   runApp(const ProviderScope(child: BillingApp()));
@@ -115,6 +116,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 ? Row(
                   children: [
                     NavigationRail(
+                      indicatorColor: Color.fromARGB(255, 2, 113, 192),
+                      selectedIconTheme: IconThemeData(color: Colors.white),
+                      unselectedLabelTextStyle: TextStyle(
+                        color: Colors.blueGrey,
+                      ),
+                      unselectedIconTheme: IconThemeData(
+                        color: Colors.blueGrey,
+                      ),
+                      backgroundColor: Colors.white,
                       selectedIndex: _currentIndex,
                       onDestinationSelected: _onItemTapped,
                       labelType: NavigationRailLabelType.all,

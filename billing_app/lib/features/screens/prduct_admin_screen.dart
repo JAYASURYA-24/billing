@@ -1,6 +1,6 @@
 import 'package:billing/features/models/product.dart';
 import 'package:billing/features/models/shop.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,9 +23,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     Product? product,
   }) {
     final _nameController = TextEditingController(text: product?.name ?? '');
-    final _priceController = TextEditingController(
-      // text: product?.price.toString() ?? '',
-    );
+
     final isEdit = product != null;
 
     showDialog(
@@ -51,21 +49,6 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                     ),
                   ),
                 ),
-                // const SizedBox(height: 10),
-                // TextFormField(
-                //   controller: _priceController,
-                //   cursorColor: const Color.fromARGB(255, 2, 113, 192),
-                //   decoration: const InputDecoration(
-                //     labelText: 'Price',
-                //     labelStyle: TextStyle(color: Colors.black),
-                //     focusedBorder: UnderlineInputBorder(
-                //       borderSide: BorderSide(
-                //         color: Color.fromARGB(255, 2, 113, 192),
-                //       ),
-                //     ),
-                //   ),
-                //   keyboardType: TextInputType.number,
-                // ),
               ],
             ),
             actions: [
@@ -86,15 +69,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                 ),
                 onPressed: () {
                   final name = _nameController.text.trim();
-                  // final price =
-                  //     double.tryParse(_priceController.text.trim()) ?? 0;
+
                   if (name.isEmpty) return;
 
-                  final newProduct = Product(
-                    id: product?.id ?? '',
-                    name: name,
-                    // price: price,
-                  );
+                  final newProduct = Product(id: product?.id ?? '', name: name);
 
                   if (isEdit) {
                     ref
@@ -217,6 +195,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
 
     if (shouldDelete == true) {
       ref.read(productProvider.notifier).deleteProduct(product.id);
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('"${product.name}" deleted')));
@@ -254,6 +233,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
 
     if (shouldDelete == true) {
       await ref.read(shopProvider.notifier).deleteShop(shop.id);
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Shop "${shop.name}" deleted')));
@@ -379,9 +359,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                                     ),
                                     child: ListTile(
                                       title: Text(product.name),
-                                      // subtitle: Text(
-                                      //   '\$ ${product.price.toStringAsFixed(2)}',
-                                      // ),
+
                                       trailing: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [

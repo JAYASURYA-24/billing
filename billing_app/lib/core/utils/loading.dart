@@ -21,3 +21,10 @@ Future<T> showLoadingWhile<T>(BuildContext context, Future<T> future) async {
     Navigator.pop(context);
   }
 }
+
+Future<T> showLoadingWhileTask<T>(
+  BuildContext context,
+  Future<T> Function() task,
+) async {
+  return showLoadingWhile(context, task());
+}
