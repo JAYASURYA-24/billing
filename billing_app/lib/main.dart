@@ -1,3 +1,5 @@
+import 'package:billing/features/providers/role_provider.dart';
+import 'package:billing/features/screens/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -23,19 +25,27 @@ void main() async {
   runApp(const ProviderScope(child: BillingApp()));
 }
 
-class BillingApp extends StatelessWidget {
+class BillingApp extends ConsumerWidget {
   const BillingApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final role = ref.watch(roleProvider);
+
+    print("👀 BillingApp rebuilt with role=$role");
+
     return MaterialApp(
+      key: ValueKey(role), // 🔑 forces rebuild when role changes
       title: 'Billing System',
       theme: ThemeData(
         primarySwatch: Colors.teal,
         scaffoldBackgroundColor: const Color(0xFFE3F2FD),
       ),
       debugShowCheckedModeBanner: false,
-      home: const MainNavigationScreen(),
+      home: switch (role) {
+        UserRole.none => const LoginScreen(),
+        UserRole.user || UserRole.admin => const MainNavigationScreen(),
+      },
     );
   }
 }
@@ -202,3 +212,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 }
+
+
+  // pageFormat: PdfPageFormat(
+  //       72 * PdfPageFormat.mm, // match printer's printable width
+  //       double.infinity,
+  //       marginAll: 2 * PdfPageFormat.mm, // minimal margins
+  //     ),

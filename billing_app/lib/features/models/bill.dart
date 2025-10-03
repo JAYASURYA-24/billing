@@ -54,6 +54,7 @@ class Bill {
   final List<BillItem> items;
   final bool isPaid;
   final Timestamp createdAt;
+  final Timestamp? markedAsPaidAt;
 
   final double currentPurchaseTotal;
   final double previousUnpaid;
@@ -70,6 +71,7 @@ class Bill {
     required this.items,
     required this.isPaid,
     required this.createdAt,
+    this.markedAsPaidAt,
 
     required this.currentPurchaseTotal,
     required this.previousUnpaid,
@@ -92,6 +94,7 @@ class Bill {
       'paidAmount': paidAmount,
       'balance': balance,
       'discountAmount': discountAmount,
+      'markedAsPaidAt': markedAsPaidAt,
 
       'discountedTotal': discountedTotal,
       'items': items.map((e) => e.toMap()).toList(),
@@ -110,7 +113,7 @@ class Bill {
       shopName: map['shopName'] ?? '',
       isPaid: map['isPaid'] is bool ? map['isPaid'] : false,
       createdAt: map['createdAt'] ?? Timestamp.now(),
-
+      markedAsPaidAt: map['markedAsPaidAt'],
       currentPurchaseTotal:
           (map['currentPurchaseTotal'] as num?)?.toDouble() ?? 0.0,
       previousUnpaid: (map['previousUnpaid'] as num?)?.toDouble() ?? 0.0,
@@ -134,6 +137,7 @@ class Bill {
     List<BillItem>? items,
     bool? isPaid,
     Timestamp? createdAt,
+    Timestamp? markedAsPaidAt,
     double? total,
     double? currentPurchaseTotal,
     double? previousUnpaid,
@@ -150,7 +154,7 @@ class Bill {
       items: items ?? this.items,
       isPaid: isPaid ?? this.isPaid,
       createdAt: createdAt ?? this.createdAt,
-
+      markedAsPaidAt: markedAsPaidAt ?? this.markedAsPaidAt,
       currentPurchaseTotal: currentPurchaseTotal ?? this.currentPurchaseTotal,
       paidAmount: paidAmount ?? this.paidAmount,
       previousUnpaid: previousUnpaid ?? this.previousUnpaid,

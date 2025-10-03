@@ -1,16 +1,27 @@
 import 'package:billing/core/utils/loading.dart';
 import 'package:billing/features/providers/bill_provider.dart';
+import 'package:billing/features/providers/role_provider.dart';
+import 'package:billing/features/screens/deletedBills.dart';
+import 'package:billing/features/screens/login_screen.dart';
 
 import 'package:billing/features/services/pdfservices.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
 
 import '../models/bill.dart';
 import '../services/firestore_services.dart';
 import 'package:month_picker_dialog/month_picker_dialog.dart';
+import 'package:excel/excel.dart' as xls;
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:pdf/widgets.dart' as pw;
+
+import 'dart:io';
 
 class BillExplorerScreen extends ConsumerStatefulWidget {
   const BillExplorerScreen({Key? key}) : super(key: key);
@@ -47,11 +58,14 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
     super.dispose();
   }
 
-  // Helper method to check if a bill matches the date filter
   bool _matchesDateFilter(Bill bill) {
     if (filterType == 'none') return true;
 
-    final billDate = bill.createdAt.toDate();
+    // pick correct date based on isPaid
+    final DateTime? billDate =
+        bill.isPaid ? bill.markedAsPaidAt?.toDate() : bill.createdAt.toDate();
+
+    if (billDate == null) return false;
 
     if (filterType == 'date' && selectedDate != null) {
       return billDate.year == selectedDate!.year &&
@@ -104,7 +118,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
           .toList();
     }
 
-    // Normal filtering logic
+    // ✅ Apply date filter when filterType != none
     return shopsData
         .map((shopData) {
           final List<Bill> bills = shopData['bills'] as List<Bill>;
@@ -142,7 +156,6 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
         .toList();
   }
 
-  // Helper method to calculate daily and monthly totals
   Map<String, double> _calculateDailyAndMonthlyTotals(
     List<Map<String, dynamic>> shopsData,
     bool isPaid,
@@ -157,7 +170,15 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
       final List<Bill> bills = shopData['bills'] as List<Bill>;
 
       for (final bill in bills) {
-        final billDate = bill.createdAt.toDate();
+        // ✅ Select date field based on isPaid
+        final DateTime? billDate =
+            isPaid
+                ? bill.markedAsPaidAt
+                    ?.toDate() // paid → use markedAsPaidAt
+                : bill.createdAt.toDate(); // unpaid → use createdAt
+
+        if (billDate == null) continue;
+
         final billDateOnly = DateTime(
           billDate.year,
           billDate.month,
@@ -165,12 +186,12 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
         );
         final todayOnly = DateTime(today.year, today.month, today.day);
 
-        // Check if bill is from today
+        // Check if bill matches today
         if (billDateOnly.isAtSameMomentAs(todayOnly)) {
           dailyTotal += isPaid ? bill.discountedTotal : bill.balance;
         }
 
-        // Check if bill is from current month
+        // Check if bill matches current month
         if (billDate.year == currentMonth.year &&
             billDate.month == currentMonth.month) {
           monthlyTotal += isPaid ? bill.discountedTotal : bill.balance;
@@ -402,6 +423,396 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
     );
   }
 
+  // Future<void> _generateReportExcel(
+  //   BuildContext context,
+  //   WidgetRef ref,
+  //   DateTime date,
+  // ) async {
+  //   final firestore = ref.read(firestoreServiceProvider);
+
+  //   // Fetch bills for that date (make sure you implemented this in FirestoreService)
+  //   final bills = await firestore.fetchBillsByDate(date);
+
+  //   double totalAmount = 0;
+  //   double totalPaid = 0;
+  //   double totalUnpaid = 0;
+
+  //   for (var bill in bills) {
+  //     totalAmount += bill.discountedTotal;
+  //     if (bill.isPaid) {
+  //       totalPaid += bill.paidAmount;
+  //     } else {
+  //       totalUnpaid += bill.balance;
+  //     }
+  //   }
+
+  //   // Create Excel
+  //   final excel = xls.Excel.createExcel();
+  //   final sheet = excel['Report'];
+
+  //   // Header row
+  //   sheet.appendRow([
+  //     xls.TextCellValue('Shop Name'),
+  //     xls.TextCellValue('Bill Number'),
+  //     xls.TextCellValue("Created At"),
+  //     xls.TextCellValue("Paid At"),
+  //     xls.TextCellValue('Total Amount'),
+  //     // xls.TextCellValue('Paid Amount'),
+  //     xls.TextCellValue('Balance'),
+  //     xls.TextCellValue('Status'),
+  //   ]);
+
+  //   // Bill rows
+  //   for (var bill in bills) {
+  //     final createdAtFormatted = DateFormat(
+  //       'dd-MM-yy',
+  //     ).format((bill.createdAt as Timestamp).toDate());
+  //     final paidAtFormatted =
+  //         bill.markedAsPaidAt != null
+  //             ? DateFormat(
+  //               'dd-MM-yy',
+  //             ).format((bill.markedAsPaidAt as Timestamp).toDate())
+  //             : "-"; // show dash if null
+
+  //     sheet.appendRow([
+  //       xls.TextCellValue(bill.shopName),
+  //       xls.TextCellValue(bill.billNumber),
+  //       xls.TextCellValue(createdAtFormatted),
+  //       xls.TextCellValue(paidAtFormatted),
+
+  //       xls.DoubleCellValue(bill.discountedTotal),
+  //       // xls.DoubleCellValue(bill.paidAmount),
+  //       xls.DoubleCellValue(bill.balance),
+  //       xls.TextCellValue(bill.isPaid ? "Paid" : "Unpaid"),
+  //     ]);
+  //   }
+
+  //   // Add summary row
+  //   sheet.appendRow([]);
+  //   sheet.appendRow([
+  //     xls.TextCellValue("TOTAL"),
+  //     xls.TextCellValue(""),
+  //     xls.TextCellValue(""),
+  //     xls.DoubleCellValue(totalAmount),
+  //     xls.DoubleCellValue(totalPaid),
+  //     xls.DoubleCellValue(totalUnpaid),
+  //     xls.TextCellValue(""),
+  //   ]);
+
+  //   // Save file
+  //   final dir = await getApplicationDocumentsDirectory();
+  //   print("getttinggg enterdddddd");
+  //   final path =
+  //       "${dir.path}/Bills_Report_${DateFormat('ddMMyyyy').format(date)}.xlsx";
+  //   final fileBytes = excel.encode();
+  //   if (fileBytes != null) {
+  //     final file =
+  //         File(path)
+  //           ..createSync(recursive: true)
+  //           ..writeAsBytesSync(fileBytes);
+
+  //     // Open Excel file
+  //     await OpenFilex.open(file.path);
+  //   } else {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text("Failed to generate Excel file")),
+  //     );
+  //   }
+  // }
+  Future<void> _generateReportExcel(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime date,
+  ) async {
+    final firestore = ref.read(firestoreServiceProvider);
+    final result = await firestore.fetchBillsByDate(date);
+
+    final createdBills = result["created"] ?? [];
+    final paidBills = result["paid"] ?? [];
+
+    final excel = xls.Excel.createExcel();
+    final sheet = excel['Report'];
+
+    // ==== Section 1: Created Bills ====
+    sheet.appendRow([
+      xls.TextCellValue(
+        "Created Bills on ${DateFormat('dd-MM-yy').format(date)}",
+      ),
+    ]);
+    sheet.appendRow([
+      xls.TextCellValue('Shop Name'),
+      xls.TextCellValue('Bill Number'),
+      xls.TextCellValue("Created At"),
+      xls.TextCellValue('Total Amount'),
+      xls.TextCellValue('Balance'),
+      xls.TextCellValue('Status'),
+    ]);
+
+    double createdTotal = 0;
+    double createdPaid = 0;
+    double createdUnpaid = 0;
+
+    for (var bill in createdBills) {
+      createdTotal += bill.discountedTotal;
+      if (bill.isPaid) {
+        createdPaid += bill.paidAmount;
+      } else {
+        createdUnpaid += bill.balance;
+      }
+
+      sheet.appendRow([
+        xls.TextCellValue(bill.shopName),
+        xls.TextCellValue(bill.billNumber),
+        xls.TextCellValue(
+          DateFormat('dd-MM-yy').format((bill.createdAt as Timestamp).toDate()),
+        ),
+        xls.DoubleCellValue(bill.discountedTotal),
+        xls.DoubleCellValue(bill.balance),
+        xls.TextCellValue(bill.isPaid ? "Paid" : "Unpaid"),
+      ]);
+    }
+
+    // Totals for created bills
+    sheet.appendRow([
+      xls.TextCellValue(""),
+      xls.TextCellValue(""),
+      xls.TextCellValue("Totals"),
+      xls.DoubleCellValue(createdTotal),
+      xls.DoubleCellValue(createdUnpaid),
+      xls.TextCellValue("Created & Paid: $createdPaid"),
+    ]);
+
+    // ==== Section 2: Outstanding (Paid Bills) ====
+    sheet.appendRow([]);
+    sheet.appendRow([
+      xls.TextCellValue(
+        "Outstanding Bills (Paid on ${DateFormat('dd-MM-yy').format(date)})",
+      ),
+    ]);
+    sheet.appendRow([
+      xls.TextCellValue('Shop Name'),
+      xls.TextCellValue('Bill Number'),
+      xls.TextCellValue("Paid At"),
+      xls.TextCellValue('Paid Amount'),
+      xls.TextCellValue('Status'),
+    ]);
+
+    double paidTotal = 0;
+    for (var bill in paidBills) {
+      paidTotal += bill.paidAmount;
+
+      sheet.appendRow([
+        xls.TextCellValue(bill.shopName),
+        xls.TextCellValue(bill.billNumber),
+        xls.TextCellValue(
+          DateFormat(
+            'dd-MM-yy',
+          ).format((bill.markedAsPaidAt as Timestamp).toDate()),
+        ),
+        xls.DoubleCellValue(bill.paidAmount),
+        xls.TextCellValue("Paid"),
+      ]);
+    }
+
+    // Totals for outstanding bills
+    sheet.appendRow([
+      xls.TextCellValue(""),
+      xls.TextCellValue(""),
+      xls.TextCellValue("Total Marked as Paid Today"),
+      xls.DoubleCellValue(paidTotal),
+    ]);
+
+    for (var bill in paidBills) {
+      sheet.appendRow([
+        xls.TextCellValue(bill.shopName),
+        xls.TextCellValue(bill.billNumber),
+        xls.TextCellValue(
+          DateFormat(
+            'dd-MM-yy',
+          ).format((bill.markedAsPaidAt as Timestamp).toDate()),
+        ),
+        xls.DoubleCellValue(bill.paidAmount),
+        xls.TextCellValue("Paid"),
+      ]);
+    }
+
+    // Save & open
+    final dir = await getApplicationDocumentsDirectory();
+    final path =
+        "${dir.path}/Bills_Report_${DateFormat('ddMMyyyy').format(date)}.xlsx";
+    final fileBytes = excel.encode();
+
+    if (fileBytes != null) {
+      final file =
+          File(path)
+            ..createSync(recursive: true)
+            ..writeAsBytesSync(fileBytes);
+      await OpenFilex.open(file.path);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to generate Excel file")),
+      );
+    }
+  }
+
+  Future<void> _generateReportPdf(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime date,
+  ) async {
+    final firestore = ref.read(firestoreServiceProvider);
+
+    // Fetch bills separately (created vs paid)
+    final result = await firestore.fetchBillsByDate(date);
+    final createdBills = result["created"] ?? [];
+    final paidBills = result["paid"] ?? [];
+
+    // Totals
+    double createdTotal = 0;
+    double createdUnpaid = 0;
+    double createdPaid = 0;
+
+    for (var bill in createdBills) {
+      createdTotal += bill.discountedTotal;
+      if (bill.isPaid) {
+        createdPaid += bill.paidAmount;
+      } else {
+        createdUnpaid += bill.balance;
+      }
+    }
+
+    double paidTotal = 0;
+    for (var bill in paidBills) {
+      paidTotal += bill.paidAmount;
+    }
+
+    // Create PDF document
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        build:
+            (context) => [
+              pw.Text(
+                'Bills Report - ${DateFormat('dd/MM/yyyy').format(date)}',
+                style: pw.TextStyle(
+                  fontSize: 18,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 16),
+
+              // Section 1: Created Bills
+              pw.Text(
+                "Created Bills",
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.Table.fromTextArray(
+                headers: [
+                  'Shop Name',
+                  'Bill Number',
+                  'Created At',
+                  'Total',
+                  'Balance',
+                  'Status',
+                ],
+                data:
+                    createdBills.map((b) {
+                      return [
+                        b.shopName,
+                        b.billNumber,
+                        DateFormat(
+                          'dd-MM',
+                        ).format((b.createdAt as Timestamp).toDate()),
+                        b.discountedTotal.toStringAsFixed(2),
+                        b.balance.toStringAsFixed(2),
+                        b.isPaid ? "Paid" : "Unpaid",
+                      ];
+                    }).toList(),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    "Today Total Amount: ${createdTotal.toStringAsFixed(2)}",
+                    style: pw.TextStyle(
+                      fontSize: 12,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Text(
+                    "Paid: ${createdPaid.toStringAsFixed(2)}",
+                    style: pw.TextStyle(
+                      fontSize: 12,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.Text(
+                    "Unpaid: ${createdUnpaid.toStringAsFixed(2)}",
+                    style: pw.TextStyle(
+                      fontSize: 12,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+
+              pw.SizedBox(height: 20),
+
+              // Section 2: Outstanding (Paid Today)
+              pw.Text(
+                "Outstanding (Paid Today)",
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.Table.fromTextArray(
+                headers: ['Shop Name', 'Bill Number', 'Paid At', 'Paid Amount'],
+                data:
+                    paidBills.map((b) {
+                      return [
+                        b.shopName,
+                        b.billNumber,
+                        DateFormat(
+                          'dd-MM',
+                        ).format((b.markedAsPaidAt as Timestamp).toDate()),
+                        b.paidAmount.toStringAsFixed(2),
+                      ];
+                    }).toList(),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    "Outstanding Paid Today: ${paidTotal.toStringAsFixed(2)}",
+                    style: pw.TextStyle(
+                      fontSize: 12,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+      ),
+    );
+
+    final dir = await getApplicationDocumentsDirectory();
+    final path =
+        "${dir.path}/Bills_Report_${DateFormat('ddMMyyyy').format(date)}.pdf";
+    final file = File(path);
+    await file.writeAsBytes(await pdf.save());
+
+    await OpenFilex.open(file.path);
+  }
+
   @override
   Widget build(BuildContext context) {
     final firestore = ref.watch(firestoreServiceProvider);
@@ -427,58 +838,80 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
             Tab(text: 'Search by Bill No'),
           ],
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color.fromARGB(255, 226, 88, 78),
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () async {
-                final confirmed = await showDialog<bool>(
-                  barrierDismissible: false,
-                  context: context,
-                  builder:
-                      (ctx) => AlertDialog(
-                        backgroundColor: const Color(0xFFE3F2FD),
-                        title: const Text('Delete ALL Bills?'),
-                        content: const Text(
-                          '⚠️ This will delete the entire bills collection.\nAre you sure?',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(false),
-                            child: const Text(
-                              'Cancel',
-                              style: TextStyle(color: Colors.blue),
-                            ),
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                            ),
-                            onPressed: () => Navigator.of(ctx).pop(true),
-                            child: const Text(
-                              'Delete All',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                );
 
-                if (confirmed == true) {
-                  await ref.read(firestoreServiceProvider).deleteAllBills();
-                  ScaffoldMessenger.of(context).clearSnackBars();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('All bills deleted')),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) async {
+              if (value == 'deleted') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DeletedBillsScreen()),
+                );
+              } else if (value == 'pdf') {
+                final selectedDate = await showDatePicker(
+                  context: context,
+                  initialDate: DateTime.now(),
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now(),
+                );
+                if (selectedDate != null) {
+                  await showLoadingWhile(
+                    context,
+                    _generateReportPdf(context, ref, selectedDate),
                   );
-                  setState(() {});
                 }
-              },
-              child: const Text('Delete All Bills'),
-            ),
+              } else if (value == 'excel') {
+                final selectedDate = await showDatePicker(
+                  context: context,
+                  initialDate: DateTime.now(),
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now(),
+                );
+                if (selectedDate != null) {
+                  await showLoadingWhile(
+                    context,
+                    _generateReportExcel(context, ref, selectedDate),
+                  );
+                }
+              } else if (value == 'logout') {
+                await ref.read(roleProvider.notifier).logout();
+              }
+            },
+            itemBuilder:
+                (context) => [
+                  const PopupMenuItem(
+                    value: 'deleted',
+                    child: ListTile(
+                      leading: Icon(Icons.delete, color: Colors.red),
+                      title: Text('Deleted Bills'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'pdf',
+                    child: ListTile(
+                      leading: Icon(Icons.picture_as_pdf, color: Colors.green),
+                      title: Text('Download PDF Report'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'excel',
+                    child: ListTile(
+                      leading: Icon(Icons.table_chart, color: Colors.blue),
+                      title: Text('Download Excel Report'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'logout',
+                    child: ListTile(
+                      leading: Icon(
+                        Icons.logout,
+                        color: Color.fromARGB(255, 255, 145, 0),
+                      ),
+                      title: Text('Logout'),
+                    ),
+                  ),
+                ],
           ),
         ],
       ),
@@ -660,7 +1093,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                   style: const TextStyle(color: Colors.green),
                                 ),
                                 onTap: () {
-                                  _showPaidBillsDialog(context, paidBills);
+                                  _showPaidBillsDialog(context, ref, paidBills);
                                 },
                               );
                             },
@@ -714,10 +1147,8 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
               Expanded(
                 child: unpaidBillsAsync.when(
                   data: (shopsData) {
-                    // Apply date/month filter first
                     final dateFiltered = _filterShopsData(shopsData);
 
-                    // Then apply shop name filter
                     final filtered =
                         dateFiltered
                             .where(
@@ -856,9 +1287,10 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                 onTap: () {
                                   _showUnPaidBillsDialog(
                                     context,
-                                    unpaidBills,
                                     ref,
-                                    shopName,
+                                    unpaidBills,
+
+                                    // shopName,
                                   );
                                 },
                               );
@@ -947,7 +1379,11 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
     );
   }
 
-  void _showPaidBillsDialog(BuildContext context, List<Bill> paidBills) {
+  void _showPaidBillsDialog(
+    BuildContext context,
+    WidgetRef ref,
+    List<Bill> paidBills,
+  ) {
     final totalPaid = paidBills.fold<double>(
       0,
       (sum, bill) => sum + bill.discountedTotal,
@@ -979,27 +1415,51 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
               });
             }
 
-            return AlertDialog(
-              contentPadding: EdgeInsets.all(0),
-              backgroundColor: const Color(0xFFE3F2FD),
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Paid Bills'),
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).pop(),
-                    child: const Icon(Icons.close, color: Colors.red),
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                // width: double.maxFinite,
+            return Dialog(
+              insetPadding: EdgeInsets.all(8),
+              // removes default margin
+              backgroundColor: Colors.transparent, // so we can style our own
+              child: Container(
+                width: MediaQuery.of(context).size.width, // full width
+                height: MediaQuery.of(context).size.height * 0.8, // 85% height
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE3F2FD),
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 🔍 Search field
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: Colors.grey, width: 0.5),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Paid Bills',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.of(context).pop(),
+                            child: const Icon(Icons.close, color: Colors.red),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Search field
                     Padding(
-                      padding: const EdgeInsets.all(10.0),
+                      padding: const EdgeInsets.all(16.0),
                       child: TextField(
                         controller: searchController,
                         onChanged: filterBills,
@@ -1013,48 +1473,167 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                         ),
                       ),
                     ),
+
                     const SizedBox(height: 12),
 
-                    // List of bills
-                    SizedBox(
-                      height: 400,
+                    // Bills list
+                    Expanded(
                       child: ListView.builder(
-                        shrinkWrap: true,
                         itemCount: filteredBills.length,
                         itemBuilder: (context, index) {
                           final bill = filteredBills[index];
                           return ListTile(
                             dense: true,
-                            title: Row(
-                              children: [
-                                Text('${bill.billNumber}'),
-                                const SizedBox(width: 6),
-                                GestureDetector(
-                                  onTap: () {
-                                    Clipboard.setData(
-                                      ClipboardData(text: bill.billNumber),
-                                    );
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Copied Bill #${bill.billNumber}',
+                            title: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+
+                              child: Row(
+                                children: [
+                                  Text('${bill.billNumber}'),
+                                  const SizedBox(width: 6),
+                                  GestureDetector(
+                                    onTap: () {
+                                      Clipboard.setData(
+                                        ClipboardData(text: bill.billNumber),
+                                      );
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Copied Bill #${bill.billNumber}',
+                                          ),
                                         ),
-                                      ),
-                                    );
-                                  },
-                                  child: const Icon(
-                                    Icons.copy,
-                                    size: 18,
-                                    color: Colors.grey,
+                                      );
+                                    },
+                                    child: const Icon(
+                                      Icons.copy,
+                                      size: 18,
+                                      color: Colors.grey,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                            subtitle: Text(
-                              DateFormat(
-                                'dd MMM yyyy',
-                              ).format(bill.createdAt.toDate()),
+                            // subtitle: Padding(
+                            //   padding: const EdgeInsets.symmetric(
+                            //     horizontal: 8,
+                            //   ),
+                            //   child: Text(
+                            //     bill.markedAsPaidAt != null
+                            //         ? DateFormat(
+                            //           'dd MMM yyyy',
+                            //         ).format(bill.markedAsPaidAt!.toDate())
+                            //         : '—',
+                            //   ),
+                            // ),
+                            onLongPress: () async {
+                              final shouldDelete = await showDialog<bool>(
+                                context: context,
+                                barrierDismissible: false,
+                                builder:
+                                    (ctx2) => AlertDialog(
+                                      backgroundColor: const Color(0xFFE3F2FD),
+                                      title: const Text("Delete Bill"),
+                                      content: Text(
+                                        "Are you sure you want to delete Bill #${bill.billNumber}?",
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed:
+                                              () =>
+                                                  Navigator.of(ctx2).pop(true),
+                                          child: const Text(
+                                            "Delete",
+                                            style: TextStyle(color: Colors.red),
+                                          ),
+                                        ),
+                                        TextButton(
+                                          onPressed:
+                                              () =>
+                                                  Navigator.of(ctx2).pop(false),
+                                          child: const Text(
+                                            "Cancel",
+                                            style: TextStyle(
+                                              color: Colors.blue,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                              );
+
+                              if (shouldDelete == true) {
+                                try {
+                                  final firestore = ref.read(
+                                    firestoreServiceProvider,
+                                  );
+                                  await firestore.deleteBill(bill.id);
+                                  setState(() {
+                                    filteredBills.removeWhere(
+                                      (b) => b.id == bill.id,
+                                    );
+                                  });
+                                  ScaffoldMessenger.of(
+                                    context,
+                                  ).clearSnackBars();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        "Deleted Bill #${bill.billNumber}",
+                                      ),
+                                    ),
+                                  );
+
+                                  // Refresh providers
+                                  ref.invalidate(paidBillsProvider);
+                                  ref.invalidate(unpaidBillsProvider);
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("Error deleting bill: $e"),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            subtitle: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  // ✅ Created At
+                                  Text(
+                                    DateFormat(
+                                      'dd MMM yyyy',
+                                    ).format(bill.createdAt.toDate()),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+
+                                  // ✅ Marked As Paid At
+                                  // Text(
+                                  //   bill.markedAsPaidAt != null
+                                  //       ? DateFormat(
+                                  //         'dd MMM yyyy',
+                                  //       ).format(bill.markedAsPaidAt!.toDate())
+                                  //       : '—',
+                                  //   style: const TextStyle(
+                                  //     fontSize: 12,
+                                  //     color: Colors.grey,
+                                  //   ),
+                                  // ),
+                                ],
+                              ),
                             ),
+
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1062,16 +1641,16 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                   '\$ ${bill.discountedTotal.toStringAsFixed(2)}',
                                   style: const TextStyle(
                                     color: Colors.green,
-                                    fontSize: 12,
+                                    fontSize: 14,
                                   ),
                                 ),
                                 IconButton(
                                   onPressed: () async {
                                     await generateAndOpenPdf(bill, false);
                                   },
-                                  icon: Icon(
+                                  icon: const Icon(
                                     Icons.download,
-                                    size: 18,
+                                    size: 20,
                                     color: Colors.grey,
                                   ),
                                 ),
@@ -1081,17 +1660,15 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                         },
                       ),
                     ),
+
                     const Divider(),
-                    Align(
-                      alignment: Alignment.center,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          'Total: \$ ${totalPaid.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        'Total: \$ ${totalPaid.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
                         ),
                       ),
                     ),
@@ -1105,119 +1682,22 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
     );
   }
 
-  // Rest of the methods remain the same...
-  // void _showPaidBillsDialog(BuildContext context, List<Bill> paidBills) {
-  //   final totalPaid = paidBills.fold<double>(
-  //     0,
-  //     (sum, bill) => sum + bill.discountedTotal,
-  //   );
-
-  //   showDialog(
-  //     barrierDismissible: false,
-  //     context: context,
-  //     builder:
-  //         (ctx) => AlertDialog(
-  //           backgroundColor: const Color(0xFFE3F2FD),
-  //           title: Row(
-  //             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-  //             children: [
-  //               const Text('Paid Bills'),
-  //               GestureDetector(
-  //                 onTap: () {
-  //                   Navigator.of(context).pop();
-  //                 },
-  //                 child: const Icon(Icons.close, color: Colors.red),
-  //               ),
-  //             ],
-  //           ),
-  //           content: SizedBox(
-  //             width: double.maxFinite,
-  //             child: Column(
-  //               mainAxisSize: MainAxisSize.min,
-  //               children: [
-  //                 SizedBox(
-  //                   height: 400,
-  //                   child: ListView.builder(
-  //                     shrinkWrap: true,
-  //                     itemCount: paidBills.length,
-  //                     itemBuilder: (context, index) {
-  //                       final bill = paidBills[index];
-  //                       return ListTile(
-  //                         dense: true,
-  //                         title: Row(
-  //                           children: [
-  //                             Text('Bill #${bill.billNumber}'),
-  //                             const SizedBox(width: 8),
-  //                             GestureDetector(
-  //                               onTap: () {
-  //                                 Clipboard.setData(
-  //                                   ClipboardData(text: bill.billNumber),
-  //                                 );
-  //                                 ScaffoldMessenger.of(
-  //                                   context,
-  //                                 ).clearSnackBars();
-  //                                 ScaffoldMessenger.of(context).showSnackBar(
-  //                                   SnackBar(
-  //                                     content: Text(
-  //                                       'Copied Bill #${bill.billNumber}',
-  //                                     ),
-  //                                   ),
-  //                                 );
-  //                               },
-  //                               child: const Icon(
-  //                                 Icons.copy,
-  //                                 size: 18,
-  //                                 color: Colors.grey,
-  //                               ),
-  //                             ),
-  //                           ],
-  //                         ),
-  //                         subtitle: Text(
-  //                           DateFormat(
-  //                             'dd MMM yyyy',
-  //                           ).format(bill.createdAt.toDate()),
-  //                         ),
-  //                         trailing: Text(
-  //                           '\$ ${bill.discountedTotal.toStringAsFixed(2)}',
-  //                           style: const TextStyle(color: Colors.green),
-  //                         ),
-  //                       );
-  //                     },
-  //                   ),
-  //                 ),
-  //                 const Divider(),
-  //                 Align(
-  //                   alignment: Alignment.centerRight,
-  //                   child: Text(
-  //                     'Total: \$ ${totalPaid.toStringAsFixed(2)}',
-  //                     style: const TextStyle(
-  //                       fontWeight: FontWeight.bold,
-  //                       fontSize: 16,
-  //                     ),
-  //                   ),
-  //                 ),
-  //               ],
-  //             ),
-  //           ),
-  //         ),
-  //   );
-  // }
-
   void _showUnPaidBillsDialog(
     BuildContext context,
-    List<Bill> unpaidBills,
     WidgetRef ref,
-    String shopName,
+    List<Bill> unpaidBills,
   ) {
+    final role = ref.watch(roleProvider);
+    List<Bill> filteredBills = List.from(unpaidBills);
+    final TextEditingController searchController = TextEditingController();
     showDialog(
       barrierDismissible: false,
       context: context,
       builder: (ctx) {
+        final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
         final selectedBills = <String, Bill>{};
         final TextEditingController _paidAmountController =
             TextEditingController();
-        List<Bill> filteredBills = List.from(unpaidBills);
-        final TextEditingController searchController = TextEditingController();
 
         return StatefulBuilder(
           builder: (context, setState) {
@@ -1243,26 +1723,46 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
               (sum, bill) => sum + bill.balance,
             );
 
-            return AlertDialog(
-              contentPadding: EdgeInsets.all(0),
-              backgroundColor: const Color(0xFFE3F2FD),
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('UnPaid Bills'),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).pop();
-                    },
-                    child: const Icon(Icons.close, color: Colors.red),
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: double.maxFinite,
+            return Dialog(
+              insetPadding: EdgeInsets.all(8),
+              backgroundColor: Colors.transparent,
+              child: Container(
+                width: MediaQuery.of(context).size.width, // full width
+                height: MediaQuery.of(context).size.height * 0.8, // 85% height
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE3F2FD),
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: Colors.grey, width: 0.5),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "UnPaid Bills",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.of(context).pop(),
+                            child: const Icon(Icons.close, color: Colors.red),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     Padding(
                       padding: const EdgeInsets.all(10.0),
                       child: TextField(
@@ -1279,224 +1779,336 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                       ),
                     ),
                     const SizedBox(height: 12),
-                    SizedBox(
-                      height: 400,
+                    Expanded(
                       child: ListView.builder(
-                        itemCount: unpaidBills.length,
+                        itemCount: filteredBills.length,
                         itemBuilder: (context, index) {
-                          final bill = unpaidBills[index];
+                          final bill = filteredBills[index];
                           final isSelected = selectedBills.containsKey(bill.id);
 
-                          return Row(
-                            children: [
-                              Checkbox(
-                                activeColor: const Color.fromARGB(
-                                  255,
-                                  2,
-                                  113,
-                                  192,
-                                ),
-                                value: isSelected,
-                                onChanged: (checked) {
-                                  setState(() {
-                                    if (checked == true) {
-                                      selectedBills[bill.id] = bill;
-                                    } else {
-                                      selectedBills.remove(bill.id);
-                                    }
-                                  });
-                                },
-                              ),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text('${bill.billNumber}'),
-                                        const SizedBox(width: 8),
-                                        GestureDetector(
-                                          onTap: () {
-                                            Clipboard.setData(
-                                              ClipboardData(
-                                                text: bill.billNumber,
-                                              ),
-                                            );
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).clearSnackBars();
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  'Copied Bill #${bill.billNumber}',
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                          child: const Icon(
-                                            Icons.copy,
-                                            size: 18,
-                                            color: Colors.grey,
+                          return InkWell(
+                            onLongPress: () async {
+                              final shouldDelete = await showDialog<bool>(
+                                context: context,
+                                barrierDismissible: false,
+                                builder:
+                                    (ctx2) => AlertDialog(
+                                      backgroundColor: const Color(0xFFE3F2FD),
+                                      title: const Text("Delete Bill"),
+                                      content: Text(
+                                        "Are you sure you want to delete Bill #${bill.billNumber}?",
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed:
+                                              () =>
+                                                  Navigator.of(ctx2).pop(true),
+                                          child: const Text(
+                                            "Delete",
+                                            style: TextStyle(color: Colors.red),
+                                          ),
+                                        ),
+                                        TextButton(
+                                          onPressed:
+                                              () =>
+                                                  Navigator.of(ctx2).pop(false),
+                                          child: const Text(
+                                            "Cancel",
+                                            style: TextStyle(
+                                              color: Colors.blue,
+                                            ),
                                           ),
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      DateFormat(
-                                        'dd MMM yyyy',
-                                      ).format(bill.createdAt.toDate()),
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black54,
+                              );
+
+                              if (shouldDelete == true) {
+                                try {
+                                  final firestore = ref.read(
+                                    firestoreServiceProvider,
+                                  );
+                                  await firestore.deleteBill(bill.id);
+                                  setState(() {
+                                    unpaidBills.removeWhere(
+                                      (b) => b.id == bill.id,
+                                    );
+                                    filteredBills.removeWhere(
+                                      (b) => b.id == bill.id,
+                                    );
+                                  });
+
+                                  ScaffoldMessenger.of(
+                                    context,
+                                  ).clearSnackBars();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        "Deleted Bill #${bill.billNumber}",
                                       ),
                                     ),
-                                  ],
+                                  );
+
+                                  // Refresh providers
+                                  ref.invalidate(unpaidBillsProvider);
+                                  ref.invalidate(paidBillsProvider);
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("Error deleting bill: $e"),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  activeColor: const Color.fromARGB(
+                                    255,
+                                    2,
+                                    113,
+                                    192,
+                                  ),
+                                  value: isSelected,
+                                  onChanged: (checked) {
+                                    setState(() {
+                                      if (checked == true) {
+                                        selectedBills[bill.id] = bill;
+                                      } else {
+                                        selectedBills.remove(bill.id);
+                                      }
+                                    });
+                                  },
                                 ),
-                              ),
-                              Text(
-                                '\$ ${bill.balance.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  color: Colors.red,
-                                  fontSize: 12,
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text('${bill.billNumber}'),
+                                          const SizedBox(width: 8),
+                                          GestureDetector(
+                                            onTap: () {
+                                              Clipboard.setData(
+                                                ClipboardData(
+                                                  text: bill.billNumber,
+                                                ),
+                                              );
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).clearSnackBars();
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    'Copied Bill #${bill.billNumber}',
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            child: const Icon(
+                                              Icons.copy,
+                                              size: 18,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        DateFormat(
+                                          'dd MMM yyyy',
+                                        ).format(bill.createdAt.toDate()),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.black54,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              IconButton(
-                                onPressed: () async {
-                                  await generateAndOpenPdf(bill, false);
-                                },
-                                icon: Icon(
-                                  Icons.download,
-                                  size: 18,
-                                  color: Colors.grey,
+                                Text(
+                                  '\$ ${bill.balance.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 14,
+                                  ),
                                 ),
-                              ),
-                            ],
+                                IconButton(
+                                  onPressed: () async {
+                                    await generateAndOpenPdf(bill, false);
+                                  },
+                                  icon: Icon(
+                                    Icons.download,
+                                    size: 20,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
                           );
                         },
                       ),
                     ),
                     const Divider(),
-                    Align(
-                      alignment: Alignment.center,
-                      child: Padding(
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        'Total : \$ ${totalSelectedBalance.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Form(
+                        key: _formKey,
+                        child: TextFormField(
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          controller: _paidAmountController,
+                          cursorErrorColor: const Color.fromARGB(
+                            255,
+                            2,
+                            113,
+                            192,
+                          ),
+                          cursorColor: const Color.fromARGB(255, 2, 113, 192),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            prefixText: "\$ ",
+                            labelStyle: const TextStyle(
+                              color: Color.fromARGB(255, 2, 113, 192),
+                            ),
+                            labelText: 'Enter Paid Amount',
+
+                            errorBorder: const OutlineInputBorder(
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(20),
+                              ),
+                              borderSide: BorderSide(
+                                color: Colors.red,
+                                width: 2,
+                              ),
+                            ),
+                            focusedErrorBorder: const OutlineInputBorder(
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(20),
+                              ),
+                              borderSide: BorderSide(
+                                color: Colors.red,
+                                width: 2,
+                              ),
+                            ),
+                            border: const OutlineInputBorder(
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(20),
+                              ),
+                            ),
+                            focusedBorder: const OutlineInputBorder(
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(20),
+                              ),
+                              borderSide: BorderSide(
+                                color: Color.fromARGB(255, 2, 113, 192),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Please enter a paid amount';
+                            }
+                            final parsed = double.tryParse(value);
+                            if (parsed == null || parsed < 0) {
+                              return 'Enter a valid number';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    if (role == UserRole.admin)
+                      Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          'Total : \$ ${totalSelectedBalance.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                        child: ElevatedButton(
+                          style: const ButtonStyle(
+                            elevation: WidgetStatePropertyAll(4),
+                            backgroundColor: WidgetStatePropertyAll(
+                              Colors.white,
+                            ),
+                          ),
+                          onPressed: () async {
+                            // Validate the form first
+                            if (!_formKey.currentState!.validate()) {
+                              return; // Stop if validation fails
+                            }
+
+                            if (selectedBills.isEmpty) {
+                              ScaffoldMessenger.of(context).clearSnackBars();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    "Please select at least one bill",
+                                  ),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                              return;
+                            }
+
+                            final firestore = ref.read(
+                              firestoreServiceProvider,
+                            );
+                            final selectedIds = selectedBills.keys.toList();
+
+                            final paidAmount =
+                                double.tryParse(
+                                  _paidAmountController.text.trim(),
+                                ) ??
+                                0.0;
+
+                            await showLoadingWhileTask(context, () async {
+                              final bills = await firestore.fetchBillsByIds(
+                                selectedIds,
+                              );
+                              await firestore.markBillsAsPaid(
+                                bills,
+                                paidAmount,
+                              );
+                            });
+
+                            ref.invalidate(unpaidBillsProvider);
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).clearSnackBars();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  '${selectedIds.length} bill(s) marked as paid.',
+                                ),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            'Paid',
+                            style: TextStyle(
+                              color: Color(0xFF00A105),
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
-              actions: [
-                TextFormField(
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  controller: _paidAmountController,
-                  cursorErrorColor: Color.fromARGB(255, 2, 113, 192),
-                  cursorColor: Color.fromARGB(255, 2, 113, 192),
-                  keyboardType: TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                    prefixText: "\$ ",
-                    labelStyle: TextStyle(
-                      color: Color.fromARGB(255, 2, 113, 192),
-                    ),
-                    labelText: 'Enter Paid Amount',
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(20)),
-                      borderSide: BorderSide(
-                        color: Color.fromARGB(255, 2, 113, 192),
-                        width: 2,
-                      ),
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(20)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(20)),
-                      borderSide: BorderSide(
-                        color: Color.fromARGB(255, 2, 113, 192),
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter a paid amount';
-                    }
-                    final parsed = double.tryParse(value);
-                    if (parsed == null || parsed < 0) {
-                      return 'Enter a valid number';
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: 8),
-                ElevatedButton(
-                  style: const ButtonStyle(
-                    elevation: WidgetStatePropertyAll(4),
-                    backgroundColor: WidgetStatePropertyAll(Colors.white),
-                  ),
-                  onPressed: () async {
-                    if (_paidAmountController.text.isEmpty) {
-                      ScaffoldMessenger.of(context).clearSnackBars();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Please enter the paid amount"),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                      return;
-                    }
-
-                    if (selectedBills.isEmpty) {
-                      ScaffoldMessenger.of(context).clearSnackBars();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Please select at least one bill"),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                      return;
-                    }
-
-                    final firestore = ref.read(firestoreServiceProvider);
-                    final selectedIds = selectedBills.keys.toList();
-
-                    final paidAmount =
-                        double.tryParse(_paidAmountController.text.trim()) ??
-                        0.0;
-
-                    await showLoadingWhileTask(context, () async {
-                      final bills = await firestore.fetchBillsByIds(
-                        selectedIds,
-                      );
-                      await firestore.markBillsAsPaid(bills, paidAmount);
-                    });
-
-                    ref.invalidate(unpaidBillsProvider);
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).clearSnackBars();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '${selectedIds.length} bill(s) marked as paid.',
-                        ),
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    'Paid',
-                    style: TextStyle(color: Color(0xFF00A105), fontSize: 12),
-                  ),
-                ),
-              ],
             );
           },
         );
@@ -1661,3 +2273,64 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
     );
   }
 }
+
+
+
+
+
+
+//delete all bills button
+   // actions: [
+        //   Padding(
+        //     padding: const EdgeInsets.only(right: 10),
+        //     child: ElevatedButton(
+        //       style: ElevatedButton.styleFrom(
+        //         backgroundColor: const Color.fromARGB(255, 226, 88, 78),
+        //         foregroundColor: Colors.white,
+        //       ),
+        //       onPressed: () async {
+        //         final confirmed = await showDialog<bool>(
+        //           barrierDismissible: false,
+        //           context: context,
+        //           builder:
+        //               (ctx) => AlertDialog(
+        //                 backgroundColor: const Color(0xFFE3F2FD),
+        //                 title: const Text('Delete ALL Bills?'),
+        //                 content: const Text(
+        //                   '⚠️ This will delete the entire bills collection.\nAre you sure?',
+        //                 ),
+        //                 actions: [
+        //                   TextButton(
+        //                     onPressed: () => Navigator.of(ctx).pop(false),
+        //                     child: const Text(
+        //                       'Cancel',
+        //                       style: TextStyle(color: Colors.blue),
+        //                     ),
+        //                   ),
+        //                   ElevatedButton(
+        //                     style: ElevatedButton.styleFrom(
+        //                       backgroundColor: Colors.red,
+        //                     ),
+        //                     onPressed: () => Navigator.of(ctx).pop(true),
+        //                     child: const Text(
+        //                       'Delete All',
+        //                       style: TextStyle(color: Colors.white),
+        //                     ),
+        //                   ),
+        //                 ],
+        //               ),
+        //         );
+
+        //         if (confirmed == true) {
+        //           await ref.read(firestoreServiceProvider).deleteAllBills();
+        //           ScaffoldMessenger.of(context).clearSnackBars();
+        //           ScaffoldMessenger.of(context).showSnackBar(
+        //             const SnackBar(content: Text('All bills deleted')),
+        //           );
+        //           setState(() {});
+        //         }
+        //       },
+        //       child: const Text('Delete All Bills'),
+        //     ),
+        //   ),
+        // ],

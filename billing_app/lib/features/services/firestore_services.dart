@@ -212,9 +212,42 @@ class FirestoreService {
     return Bill.fromMap(doc.data(), doc.id); // ✅ FIXED
   }
 
+  // Future<void> deleteBill(String billId) async {
+  //   if (billId.isEmpty) throw Exception('Bill ID is empty');
+  //   await _db.collection('bills').doc(billId).delete();
+  // }
+
   Future<void> deleteBill(String billId) async {
-    if (billId.isEmpty) throw Exception('Bill ID is empty');
-    await _db.collection('bills').doc(billId).delete();
+    final docRef = FirebaseFirestore.instance.collection('bills').doc(billId);
+
+    // Get the bill data first
+    final snapshot = await docRef.get();
+
+    if (snapshot.exists) {
+      final billData = snapshot.data();
+
+      // Save to deleted_bills collection
+      await FirebaseFirestore.instance
+          .collection('deleted_bills')
+          .doc(billId)
+          .set({
+            ...billData!,
+            // 'deletedAt': FieldValue.serverTimestamp(),
+          });
+
+      // Remove from active bills
+      await docRef.delete();
+    }
+  }
+
+  Future<List<Bill>> fetchDeletedBills() async {
+    final snapshot =
+        await FirebaseFirestore.instance
+            .collection('deleted_bills')
+            .orderBy('deletedAt', descending: true)
+            .get();
+
+    return snapshot.docs.map((doc) => Bill.fromFirestore(doc)).toList();
   }
 
   Future<void> deleteAllBills() async {
@@ -247,6 +280,7 @@ class FirestoreService {
           'isPaid': true,
           'paidAmount': alreadyPaid + originalBalance,
           'balance': 0.0,
+          'markedAsPaidAt': Timestamp.now(),
         });
         remainingPayment -= originalBalance;
       } else {
@@ -257,6 +291,7 @@ class FirestoreService {
           'isPaid': newBalance == 0.0,
           'paidAmount': newPaidAmount,
           'balance': newBalance,
+          // 'markedAsPaidAt': Timestamp.now(),
         });
 
         remainingPayment = 0.0;
@@ -269,6 +304,7 @@ class FirestoreService {
             'isPaid': false,
             'paidAmount': remainingBill.paidAmount,
             'balance': remainingBill.balance,
+            // 'markedAsPaidAt': Timestamp.now(),
           });
         }
 
@@ -539,5 +575,98 @@ class FirestoreService {
 
           return result;
         });
+  }
+
+  // Future<List<Bill>> fetchBillsByDate(DateTime date) async {
+  //   // Start of the day (00:00:00)
+  //   final start = DateTime(date.year, date.month, date.day);
+
+  //   // Start of the next day (exclusive upper bound)
+  //   final end = start.add(const Duration(days: 1));
+
+  //   final snapshot =
+  //       await FirebaseFirestore.instance
+  //           .collection('bills')
+  //           .where(
+  //             'createdAt',
+  //             isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+  //           )
+  //           .where('createdAt', isLessThan: Timestamp.fromDate(end))
+  //           .get();
+
+  //   print(
+  //     "📌 fetchBillsByDate -> ${snapshot.docs.length} bills found between $start and $end",
+  //   );
+
+  //   return snapshot.docs.map((d) => Bill.fromFirestore(d)).toList();
+  // }
+
+  // Future<List<Bill>> fetchBillsByDate(DateTime date) async {
+  //   final start = DateTime(date.year, date.month, date.day);
+  //   final end = start.add(const Duration(days: 1));
+
+  //   // Query bills created today
+  //   final createdSnap =
+  //       await FirebaseFirestore.instance
+  //           .collection('bills')
+  //           .where(
+  //             'createdAt',
+  //             isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+  //           )
+  //           .where('createdAt', isLessThan: Timestamp.fromDate(end))
+  //           .get();
+
+  //   // Query bills marked as paid today
+  //   final paidSnap =
+  //       await FirebaseFirestore.instance
+  //           .collection('bills')
+  //           .where(
+  //             'markedAsPaidAt',
+  //             isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+  //           )
+  //           .where('markedAsPaidAt', isLessThan: Timestamp.fromDate(end))
+  //           .get();
+
+  //   // Merge results (avoid duplicates using a map by docId)
+  //   final allDocs = {
+  //     for (var d in [...createdSnap.docs, ...paidSnap.docs]) d.id: d,
+  //   };
+
+  //   print("📌 fetchBillsByDate -> ${allDocs.length} bills found for $date");
+
+  //   return allDocs.values.map((d) => Bill.fromFirestore(d)).toList();
+  // }
+
+  Future<Map<String, List<Bill>>> fetchBillsByDate(DateTime date) async {
+    final start = DateTime(date.year, date.month, date.day);
+    final end = start.add(const Duration(days: 1));
+
+    // Bills created today
+    final createdSnap =
+        await FirebaseFirestore.instance
+            .collection('bills')
+            .where(
+              'createdAt',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+            )
+            .where('createdAt', isLessThan: Timestamp.fromDate(end))
+            .get();
+
+    // Bills paid today
+    final paidSnap =
+        await FirebaseFirestore.instance
+            .collection('bills')
+            .where(
+              'markedAsPaidAt',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+            )
+            .where('markedAsPaidAt', isLessThan: Timestamp.fromDate(end))
+            .get();
+
+    final createdBills =
+        createdSnap.docs.map((d) => Bill.fromFirestore(d)).toList();
+    final paidBills = paidSnap.docs.map((d) => Bill.fromFirestore(d)).toList();
+
+    return {"created": createdBills, "paid": paidBills};
   }
 }

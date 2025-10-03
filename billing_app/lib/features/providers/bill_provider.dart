@@ -99,140 +99,6 @@ class BillingNotifier extends StateNotifier<Bill> {
     state = state.copyWith(items: updatedItems, total: updatedTotal);
   }
 
-  // Future<String> _generateBillNumber() async {
-  //   final now = DateTime.now();
-  //   final datePart = DateFormat('yyMMdd').format(now);
-
-  //   final todayStart = DateTime(now.year, now.month, now.day);
-  //   final snapshot =
-  //       await FirebaseFirestore.instance
-  //           .collection('bills')
-  //           .where(
-  //             'createdAt',
-  //             isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart),
-  //           )
-  //           .get();
-
-  //   final count = snapshot.docs.length + 1;
-  //   final paddedCount = count.toString().padLeft(3, '0');
-
-  //   return 'RJ-$datePart$paddedCount';
-  // }
-
-  // Future<String> _generateBillNumber() async {
-  //   final now = DateTime.now();
-  //   final monthKey = DateFormat('yyMM').format(now); // e.g. 2509 for Sept 2025
-
-  //   final counterRef = FirebaseFirestore.instance
-  //       .collection('counters')
-  //       .doc(monthKey); // one counter per month
-
-  //   return FirebaseFirestore.instance.runTransaction((transaction) async {
-  //     final snapshot = await transaction.get(counterRef);
-
-  //     int newCount = 1;
-  //     if (snapshot.exists) {
-  //       final current = snapshot.get('lastNumber') as int;
-  //       newCount = current + 1;
-  //       transaction.update(counterRef, {'lastNumber': newCount});
-  //     } else {
-  //       transaction.set(counterRef, {'lastNumber': newCount});
-  //     }
-
-  //     final padded = newCount.toString().padLeft(4, '0'); // 🔹 4-digit padding
-  //     return 'RJ-$monthKey$padded';
-  //     // Example: RJ-25090001, RJ-25090002... RJ-25091234
-  //   });
-  // }
-
-  // Future<(Bill, List<Bill>)> generateBill(
-  //   String shopName,
-  //   bool isPaid, {
-  //   bool isPreview = false,
-  //   double paidAmount = 0.0,
-
-  //   double discountAmount = 0.0,
-  //   double discountedTotal = 0.0,
-  // }) async {
-  //   final firestore = ref.read(firestoreServiceProvider);
-  //   final createdAt = Timestamp.now();
-  //   final billNumber = await _generateBillNumber();
-
-  //   double previousUnpaid = 0.0;
-  //   List<Bill> displayUnpaidBills = [];
-
-  //   final unpaidBills = await firestore.fetchUnpaidBillsForShop(shopName);
-  //   unpaidBills.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-  //   // Calculate previous unpaid (these remain unpaid)
-  //   previousUnpaid = unpaidBills.fold(0.0, (sum, bill) {
-  //     final billTotal =
-  //         bill.discountedTotal > 0
-  //             ? bill.discountedTotal
-  //             : bill.currentPurchaseTotal;
-  //     return sum + (billTotal - bill.paidAmount);
-  //   });
-
-  //   displayUnpaidBills = unpaidBills;
-
-  //   // Calculate current purchase total
-  //   final currentTotal = state.items.fold(
-  //     0.0,
-  //     (sum, item) => sum + item.price * item.quantity,
-  //   );
-
-  //   // Current bill calculations
-  //   final finalDiscountedTotal =
-  //       discountedTotal > 0 ? discountedTotal : currentTotal;
-  //   final finalDiscountAmount = discountAmount > 0 ? discountAmount : 0.0;
-
-  //   // Current bill balance (what remains unpaid for current bill only)
-  //   final currentBillBalance = finalDiscountedTotal - paidAmount;
-
-  //   // Total balance that will remain unpaid (previous + current bill balance)
-  //   final totalBalance =
-  //       previousUnpaid + (currentBillBalance > 0 ? currentBillBalance : 0);
-
-  //   final bill = Bill(
-  //     id: const Uuid().v4(),
-  //     shopName: shopName,
-  //     items: state.items,
-  //     isPaid: isPaid, // This indicates if CURRENT BILL is paid
-  //     createdAt: createdAt,
-  //     billNumber: billNumber,
-  //     currentPurchaseTotal: currentTotal,
-  //     previousUnpaid: previousUnpaid, // Previous bills remain as unpaid
-  //     paidAmount: paidAmount, // Amount paid for current bill only
-  //     balance: totalBalance, // Total amount that will remain unpaid
-
-  //     discountAmount: finalDiscountAmount,
-  //     discountedTotal: finalDiscountedTotal, // Current bill after discount
-  //   );
-
-  //   // Save bill if not a preview
-  //   if (!isPreview) {
-  //     await firestore.saveBill(bill);
-
-  //     // Reset state
-  //     state = Bill(
-  //       id: const Uuid().v4(),
-  //       shopName: '',
-  //       items: [],
-  //       isPaid: true,
-  //       createdAt: Timestamp.now(),
-  //       billNumber: '',
-  //       currentPurchaseTotal: 0.0,
-  //       previousUnpaid: 0.0,
-  //       paidAmount: 0.0,
-  //       balance: 0.0,
-  //     );
-  //   }
-
-  //   return (bill, displayUnpaidBills);
-  // }
-
-  // Assuming you already have your Bill model defined
-
   Future<(Bill, List<Bill>)> generateBill(
     String shopName,
     bool isPaid, {
@@ -279,6 +145,7 @@ class BillingNotifier extends StateNotifier<Bill> {
         items: state.items,
         isPaid: isPaid,
         createdAt: createdAt,
+        markedAsPaidAt: isPaid ? Timestamp.now() : null,
         billNumber: "PREVIEW",
         currentPurchaseTotal: currentTotal,
         previousUnpaid: previousUnpaid,
@@ -320,6 +187,7 @@ class BillingNotifier extends StateNotifier<Bill> {
         items: state.items,
         isPaid: isPaid,
         createdAt: createdAt,
+        markedAsPaidAt: isPaid ? Timestamp.now() : null,
         billNumber: billNumber,
         currentPurchaseTotal: currentTotal,
         previousUnpaid: previousUnpaid,
@@ -409,3 +277,15 @@ class BillingNotifier extends StateNotifier<Bill> {
         return firestore.streamAllShopsPaidByMonth(year, month);
       });
 }
+
+final deletedBillsProvider = FutureProvider<List<Bill>>((ref) async {
+  final firestore = FirebaseFirestore.instance;
+  final snapshot =
+      await firestore
+          .collection('deleted_bills')
+          .orderBy('createdAt', descending: true)
+          .get();
+  print(snapshot.docs);
+
+  return snapshot.docs.map((doc) => Bill.fromFirestore(doc)).toList();
+});
