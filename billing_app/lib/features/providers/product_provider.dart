@@ -24,4 +24,18 @@ class ProductNotifier extends StateNotifier<List<Product>> {
   Future<void> updateProduct(Product product) =>
       _service.updateProduct(product);
   Future<void> deleteProduct(String id) => _service.deleteProduct(id);
+
+  Future<void> increaseQuantity(String productId, int qtyToAdd) async {
+    final product = state.firstWhere((p) => p.id == productId);
+    final updated = product.copyWith(quantity: product.quantity + qtyToAdd);
+    await updateProduct(updated);
+  }
+
+  Future<void> decreaseQuantity(String productId, int qtyToReduce) async {
+    final product = state.firstWhere((p) => p.id == productId);
+    final newQty =
+        (product.quantity - qtyToReduce).clamp(0, double.infinity).toInt();
+    final updated = product.copyWith(quantity: newQty);
+    await updateProduct(updated);
+  }
 }

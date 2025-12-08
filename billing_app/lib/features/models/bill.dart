@@ -63,6 +63,8 @@ class Bill {
 
   final double discountAmount;
   final double discountedTotal;
+  final bool? upiPayment;
+  final String? signatureUrl;
 
   Bill({
     required this.id,
@@ -71,6 +73,7 @@ class Bill {
     required this.items,
     required this.isPaid,
     required this.createdAt,
+    required this.upiPayment,
     this.markedAsPaidAt,
 
     required this.currentPurchaseTotal,
@@ -80,6 +83,7 @@ class Bill {
     this.discountAmount = 0.0,
 
     this.discountedTotal = 0.0,
+    this.signatureUrl,
   });
 
   Map<String, dynamic> toMap() {
@@ -87,6 +91,7 @@ class Bill {
       'billNumber': billNumber,
       'shopName': shopName,
       'isPaid': isPaid,
+      'upiPayment': upiPayment,
       'createdAt': createdAt,
 
       'currentPurchaseTotal': currentPurchaseTotal,
@@ -95,8 +100,9 @@ class Bill {
       'balance': balance,
       'discountAmount': discountAmount,
       'markedAsPaidAt': markedAsPaidAt,
-
+      'signatureUrl': signatureUrl,
       'discountedTotal': discountedTotal,
+
       'items': items.map((e) => e.toMap()).toList(),
     };
   }
@@ -112,6 +118,9 @@ class Bill {
       billNumber: map['billNumber'] ?? '',
       shopName: map['shopName'] ?? '',
       isPaid: map['isPaid'] is bool ? map['isPaid'] : false,
+      upiPayment:
+          map.containsKey('upiPayment') ? map['upiPayment'] as bool? : null,
+
       createdAt: map['createdAt'] ?? Timestamp.now(),
       markedAsPaidAt: map['markedAsPaidAt'],
       currentPurchaseTotal:
@@ -126,6 +135,7 @@ class Bill {
       discountAmount: (map['discountAmount'] as num?)?.toDouble() ?? 0.0,
 
       discountedTotal: (map['discountedTotal'] as num?)?.toDouble() ?? 0.0,
+      signatureUrl: map['signatureUrl'],
     );
   }
 
@@ -136,6 +146,7 @@ class Bill {
     String? shopName,
     List<BillItem>? items,
     bool? isPaid,
+    bool? upiPayment,
     Timestamp? createdAt,
     Timestamp? markedAsPaidAt,
     double? total,
@@ -146,6 +157,7 @@ class Bill {
 
     double? discountAmount,
     double? discountedTotal,
+    String? signatureUrl,
   }) {
     return Bill(
       id: id ?? this.id,
@@ -153,6 +165,7 @@ class Bill {
       shopName: shopName ?? this.shopName,
       items: items ?? this.items,
       isPaid: isPaid ?? this.isPaid,
+      upiPayment: upiPayment ?? this.upiPayment,
       createdAt: createdAt ?? this.createdAt,
       markedAsPaidAt: markedAsPaidAt ?? this.markedAsPaidAt,
       currentPurchaseTotal: currentPurchaseTotal ?? this.currentPurchaseTotal,
@@ -162,6 +175,7 @@ class Bill {
 
       discountAmount: discountAmount ?? this.discountAmount,
       discountedTotal: discountedTotal ?? this.discountedTotal,
+      signatureUrl: signatureUrl ?? this.signatureUrl,
     );
   }
 }

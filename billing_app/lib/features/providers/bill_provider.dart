@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,7 +43,7 @@ class BillingNotifier extends StateNotifier<Bill> {
           items: [],
           isPaid: true,
           createdAt: Timestamp.now(),
-
+          upiPayment: false,
           currentPurchaseTotal: 0.0,
           previousUnpaid: 0.0,
           paidAmount: 0.0,
@@ -102,15 +104,28 @@ class BillingNotifier extends StateNotifier<Bill> {
   Future<(Bill, List<Bill>)> generateBill(
     String shopName,
     bool isPaid, {
+    bool? upiPayment,
     bool isPreview = false,
     double paidAmount = 0.0,
     double discountAmount = 0.0,
     double discountedTotal = 0.0,
+
+    Uint8List? signatureBytes,
   }) async {
     final firestore = ref.read(firestoreServiceProvider);
     final createdAt = Timestamp.now();
+    String? signatureUrl;
 
-    // 🔹 Step 1: Calculate unpaid bills before creating new one
+    if (signatureBytes != null) {
+      final storage = ref.read(firebaseStorageProvider);
+      final sigPath = "signatures/${const Uuid().v4()}.png";
+
+      final sigRef = storage.ref().child(sigPath);
+
+      final uploadTask = await sigRef.putData(signatureBytes);
+      signatureUrl = await uploadTask.ref.getDownloadURL();
+    }
+
     final unpaidBills = await firestore.fetchUnpaidBillsForShop(shopName);
     unpaidBills.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
@@ -122,7 +137,6 @@ class BillingNotifier extends StateNotifier<Bill> {
       return sum + (billTotal - bill.paidAmount);
     });
 
-    // 🔹 Step 2: Calculate current totals
     final currentTotal = state.items.fold(
       0.0,
       (sum, item) => sum + item.price * item.quantity,
@@ -133,17 +147,16 @@ class BillingNotifier extends StateNotifier<Bill> {
     final finalDiscountAmount = discountAmount > 0 ? discountAmount : 0.0;
 
     final currentBillBalance = finalDiscountedTotal - paidAmount;
-    // final totalBalance =
-    //     previousUnpaid + (currentBillBalance > 0 ? currentBillBalance : 0);
+
     final totalBalance = currentBillBalance;
 
     if (isPreview) {
-      // 🔹 Return a preview bill without saving
       final previewBill = Bill(
         id: const Uuid().v4(),
         shopName: shopName,
         items: state.items,
         isPaid: isPaid,
+        upiPayment: isPaid ? upiPayment : null,
         createdAt: createdAt,
         markedAsPaidAt: isPaid ? Timestamp.now() : null,
         billNumber: "PREVIEW",
@@ -153,12 +166,12 @@ class BillingNotifier extends StateNotifier<Bill> {
         balance: totalBalance,
         discountAmount: finalDiscountAmount,
         discountedTotal: finalDiscountedTotal,
+        signatureUrl: signatureUrl,
       );
 
       return (previewBill, unpaidBills);
     }
 
-    // 🔹 Step 3: Transaction (counter + bill save together)
     final monthKey = DateFormat('yyMM').format(DateTime.now());
     final counterRef = FirebaseFirestore.instance
         .collection('counters')
@@ -186,6 +199,7 @@ class BillingNotifier extends StateNotifier<Bill> {
         shopName: shopName,
         items: state.items,
         isPaid: isPaid,
+        upiPayment: isPaid ? upiPayment : null,
         createdAt: createdAt,
         markedAsPaidAt: isPaid ? Timestamp.now() : null,
         billNumber: billNumber,
@@ -195,21 +209,28 @@ class BillingNotifier extends StateNotifier<Bill> {
         balance: totalBalance,
         discountAmount: finalDiscountAmount,
         discountedTotal: finalDiscountedTotal,
+        signatureUrl: signatureUrl,
       );
 
-      // Save bill inside the same transaction
       final billRef = FirebaseFirestore.instance
           .collection('bills')
           .doc(newBill.id);
-      transaction.set(billRef, newBill.toMap()); // ✅ works with your model
+      transaction.set(billRef, newBill.toMap());
     });
+    final firestoreService = ref.read(firestoreServiceProvider);
+    for (final item in state.items) {
+      await firestoreService.decreaseProductQuantity(
+        item.productId,
+        item.quantity,
+      );
+    }
 
-    // 🔹 Step 4: Reset state after saving
     state = Bill(
       id: const Uuid().v4(),
       shopName: '',
       items: [],
       isPaid: true,
+      upiPayment: isPaid ? upiPayment : null,
       createdAt: Timestamp.now(),
       billNumber: '',
       currentPurchaseTotal: 0.0,
@@ -232,50 +253,6 @@ class BillingNotifier extends StateNotifier<Bill> {
           }).toList(),
     );
   }
-
-  // ✅ All shops unpaid by date
-  final allShopsUnPaidByDateProvider =
-      StreamProvider.family<List<Map<String, dynamic>>, (DateTime, DateTime)>((
-        ref,
-        tuple,
-      ) {
-        final firestore = ref.watch(firestoreServiceProvider);
-        final (start, end) = tuple;
-        return firestore.streamAllShopsUnPaidByDateRange(start, end);
-      });
-
-  // ✅ All shops paid by date
-  final allShopsPaidByDateProvider =
-      StreamProvider.family<List<Map<String, dynamic>>, (DateTime, DateTime)>((
-        ref,
-        tuple,
-      ) {
-        final firestore = ref.watch(firestoreServiceProvider);
-        final (start, end) = tuple;
-        return firestore.streamAllShopsPaidByDateRange(start, end);
-      });
-
-  // ✅ All shops unpaid by month
-  final allShopsUnPaidByMonthProvider =
-      StreamProvider.family<List<Map<String, dynamic>>, (int, int)>((
-        ref,
-        tuple,
-      ) {
-        final firestore = ref.watch(firestoreServiceProvider);
-        final (year, month) = tuple;
-        return firestore.streamAllShopsUnPaidByMonth(year, month);
-      });
-
-  // ✅ All shops paid by month
-  final allShopsPaidByMonthProvider =
-      StreamProvider.family<List<Map<String, dynamic>>, (int, int)>((
-        ref,
-        tuple,
-      ) {
-        final firestore = ref.watch(firestoreServiceProvider);
-        final (year, month) = tuple;
-        return firestore.streamAllShopsPaidByMonth(year, month);
-      });
 }
 
 final deletedBillsProvider = FutureProvider<List<Bill>>((ref) async {
@@ -285,7 +262,6 @@ final deletedBillsProvider = FutureProvider<List<Bill>>((ref) async {
           .collection('deleted_bills')
           .orderBy('createdAt', descending: true)
           .get();
-  print(snapshot.docs);
 
   return snapshot.docs.map((doc) => Bill.fromFirestore(doc)).toList();
 });

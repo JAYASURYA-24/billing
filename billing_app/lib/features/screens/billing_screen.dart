@@ -21,6 +21,16 @@ class BillingScreen extends ConsumerStatefulWidget {
 }
 
 class _BillingScreenState extends ConsumerState<BillingScreen> {
+  @override
+  void dispose() {
+    _controller.dispose();
+    shopNameController.dispose();
+    paidAmountController.dispose();
+    discountPercentController.dispose();
+
+    super.dispose();
+  }
+
   final TextEditingController shopNameController = TextEditingController();
   Uint8List? customerSignBytes;
   Shop? selectedShop;
@@ -29,6 +39,11 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
     penColor: Colors.black,
     exportBackgroundColor: Colors.white,
   );
+
+  final paidAmountController = TextEditingController();
+  final discountPercentController = TextEditingController();
+  final formKey = GlobalKey<FormState>();
+
   void _editQuantityDialog(BillItem item) {
     final controller = TextEditingController(text: item.quantity.toString());
     int updatedQty = item.quantity;
@@ -82,8 +97,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
           ),
     );
   }
-
-  // global variable inside the widget
 
   void _showCustomerSignatureDialog(
     BuildContext context,
@@ -160,14 +173,13 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
     bool tempPaid = false;
     bool previousBillsTallied = false;
+    bool? upiPayment;
+    bool showPaymentAlert = false;
 
-    final paidAmountController = TextEditingController();
-    final discountPercentController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
-    // Initial discount values
     double discountAmount = 0.0;
     double discountedCurrentTotal = previewBill.currentPurchaseTotal;
+
+    double paidAmount = double.tryParse(paidAmountController.text) ?? 0.0;
 
     showModalBottomSheet(
       isScrollControlled: true,
@@ -186,17 +198,12 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
           ),
           child: StatefulBuilder(
             builder: (context, setState) {
-              // Calculate current bill payment only
               final paidAmount =
                   double.tryParse(paidAmountController.text.trim()) ?? 0.0;
               final currentBillBalance = discountedCurrentTotal - paidAmount;
 
-              // Payment status based on CURRENT BILL only
-              tempPaid =
-                  currentBillBalance <=
-                  0.01; // Small tolerance for floating point
+              tempPaid = currentBillBalance <= 0.01;
 
-              // Total amount that will remain unpaid (previous + current bill balance)
               final totalUnpaidAfterPayment =
                   previewBill.previousUnpaid +
                   (currentBillBalance > 0 ? currentBillBalance : 0);
@@ -239,32 +246,9 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                           style: const TextStyle(color: Colors.red),
                         ),
                       const Divider(),
-                      // const Text(
-                      //   'Current Purchase:',
-                      //   style: TextStyle(fontWeight: FontWeight.bold),
-                      // ),
-                      // const SizedBox(height: 6),
-                      // SizedBox(
-                      //   height: 200,
-                      //   child: ListView.builder(
-                      //     itemCount: previewBill.items.length,
-                      //     itemBuilder: (context, index) {
-                      //       final item = previewBill.items[index];
-                      //       return ListTile(
-                      //         dense: true,
-                      //         visualDensity: VisualDensity(vertical: -4),
-                      //         title: Text('${item.name} x ${item.quantity}'),
-                      //         trailing: Text(
-                      //           '\$${(item.price * item.quantity).toStringAsFixed(2)}',
-                      //         ),
-                      //       );
-                      //     },
-                      //   ),
-                      // ),
-                      // const Divider(),
+
                       const SizedBox(height: 10),
 
-                      // Current Bill Breakdown
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -287,7 +271,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
                       const SizedBox(height: 8),
 
-                      // Current Bill Summary
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -324,25 +307,12 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                 ),
                               ],
                             ),
-                            // Row(
-                            //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            //   children: [
-                            //     const Text("Paying:"),
-                            //     Text(
-                            //       "\$ ${paidAmount.toStringAsFixed(2)}",
-                            //       style: const TextStyle(
-                            //         fontWeight: FontWeight.bold,
-                            //       ),
-                            //     ),
-                            //   ],
-                            // ),
                           ],
                         ),
                       ),
 
                       const SizedBox(height: 10),
 
-                      // Overall Summary
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -405,7 +375,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                       ),
 
                       SizedBox(height: 10),
-                      // Discount section
+
                       Row(
                         children: [
                           Expanded(
@@ -451,7 +421,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                         previewBill.currentPurchaseTotal -
                                         discountAmount;
                                   });
-                                  // Clear paid amount when discount changes
+
                                   paidAmountController.clear();
                                 }
                               },
@@ -485,9 +455,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                 ),
                                 labelText:
                                     'Enter Current bill :\$ ${discountedCurrentTotal.toStringAsFixed(2)}',
-                                // helperText:
-                                //     'Max: \$${discountedCurrentTotal.toStringAsFixed(2)}',
-                                // helperStyle: TextStyle(color: Colors.green),
+
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.all(
                                     Radius.circular(20),
@@ -505,9 +473,7 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                 ),
                               ),
                               onChanged: (value) {
-                                setState(
-                                  () {},
-                                ); // Trigger rebuild to update payment status
+                                setState(() {});
                               },
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty)
@@ -528,7 +494,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Payment status display (read-only)
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -560,44 +525,123 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                         ),
                       ),
 
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 16),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // Checkbox(
-                          //   value: previousBillsTallied,
-                          //   activeColor: Colors.blue,
-                          //   onChanged: (val) {
-                          //     if (val != null)
-                          //       setState(() => previousBillsTallied = val);
-                          //   },
-                          // ),
-                          // const Text('Previous bills are tallied'),
-                          if (customerSignBytes != null)
-                            Center(
-                              child: Image.memory(
-                                customerSignBytes!,
-                                width: 150,
-                                height: 80,
-                              ),
-                            ),
-                          TextButton.icon(
-                            icon: const Icon(Icons.edit),
-                            label: Text(
-                              customerSignBytes == null
-                                  ? "Add Customer Sign"
-                                  : "Edit Customer Sign",
-                            ),
-                            onPressed:
-                                () => _showCustomerSignatureDialog(
-                                  context,
-                                  setState,
+                          paidAmount > 0.0
+                              ? Expanded(
+                                flex: 2,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Payment Mode:',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: RadioListTile<bool?>(
+                                            title: const Text('Cash'),
+                                            value: false,
+                                            dense: true,
+                                            contentPadding: EdgeInsets.zero,
+                                            groupValue: upiPayment,
+                                            activeColor: const Color.fromARGB(
+                                              255,
+                                              2,
+                                              113,
+                                              192,
+                                            ),
+                                            onChanged: (value) {
+                                              setState(() {
+                                                upiPayment = value;
+                                                showPaymentAlert = false;
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: RadioListTile<bool?>(
+                                            title: const Text('UPI'),
+                                            value: true,
+                                            dense: true,
+                                            contentPadding: EdgeInsets.zero,
+                                            groupValue: upiPayment,
+                                            activeColor: const Color.fromARGB(
+                                              255,
+                                              2,
+                                              113,
+                                              192,
+                                            ),
+                                            onChanged: (value) {
+                                              setState(() {
+                                                upiPayment = value;
+                                                showPaymentAlert = false;
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
+                              )
+                              : const SizedBox(width: 200),
+                          const SizedBox(width: 10),
+
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                if (customerSignBytes != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: Image.memory(
+                                      customerSignBytes!,
+                                      width: 150,
+                                      height: 80,
+                                    ),
+                                  ),
+                                TextButton.icon(
+                                  icon: const Icon(Icons.edit),
+                                  label: Text(
+                                    customerSignBytes == null
+                                        ? "Add Customer Sign"
+                                        : "Edit Customer Sign",
+                                  ),
+                                  onPressed:
+                                      () => _showCustomerSignatureDialog(
+                                        context,
+                                        setState,
+                                      ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 10),
 
+                      const SizedBox(height: 5),
+                      Visibility(
+                        visible: showPaymentAlert,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              "Choose Payment mode",
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 5),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -614,11 +658,9 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                 Colors.white,
                               ),
                             ),
+
                             onPressed: () async {
                               if (!formKey.currentState!.validate()) return;
-
-                              Navigator.pop(context);
-                              shopNameController.clear();
 
                               final paidAmount =
                                   double.tryParse(
@@ -626,27 +668,82 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                   ) ??
                                   0.0;
 
-                              final (finalBill, _) = await ref
-                                  .read(billingProvider.notifier)
-                                  .generateBill(
-                                    shopName,
-                                    tempPaid,
-                                    paidAmount: paidAmount,
+                              if (upiPayment == null && paidAmount != 0.0) {
+                                setState(() => showPaymentAlert = true);
+                                return;
+                              } else {
+                                setState(() => showPaymentAlert = false);
+                              }
 
-                                    discountAmount: discountAmount,
-                                    discountedTotal: discountedCurrentTotal,
-                                  );
+                              await showLoadingWhile(context, () async {
+                                shopNameController.clear();
 
-                              ref.read(selectedShopProvider.notifier).state =
-                                  null;
-                              await generateAndOpenPdf(
-                                finalBill,
-                                previousBillsTallied,
-                                signBytes: customerSignBytes,
-                              );
-                              // Reset signature after PDF generation
-                              _resetSignature();
+                                final (finalBill, _) = await ref
+                                    .read(billingProvider.notifier)
+                                    .generateBill(
+                                      shopName,
+                                      tempPaid,
+                                      paidAmount: paidAmount,
+                                      upiPayment: upiPayment,
+                                      discountAmount: discountAmount,
+                                      discountedTotal: discountedCurrentTotal,
+                                      signatureBytes: customerSignBytes,
+                                    );
+
+                                ref.read(selectedShopProvider.notifier).state =
+                                    null;
+
+                                await generateAndOpenPdf(
+                                  finalBill,
+                                  previousBillsTallied,
+                                  signBytes: customerSignBytes,
+                                );
+
+                                _resetSignature();
+                                Navigator.pop(context);
+                              }());
                             },
+
+                            // onPressed: () async {
+                            //   if (!formKey.currentState!.validate()) return;
+                            //   final paidAmount =
+                            //       double.tryParse(
+                            //         paidAmountController.text.trim(),
+                            //       ) ??
+                            //       0.0;
+                            //   if (upiPayment == null && paidAmount != 0.0) {
+                            //     setState(() => showPaymentAlert = true);
+                            //     return;
+                            //   } else {
+                            //     setState(() => showPaymentAlert = false);
+                            //   }
+                            //   ;
+
+                            //   Navigator.pop(context);
+                            //   shopNameController.clear();
+
+                            //   final (finalBill, _) = await ref
+                            //       .read(billingProvider.notifier)
+                            //       .generateBill(
+                            //         shopName,
+                            //         tempPaid,
+                            //         paidAmount: paidAmount,
+                            //         upiPayment: upiPayment,
+                            //         discountAmount: discountAmount,
+                            //         discountedTotal: discountedCurrentTotal,
+                            //         signatureBytes: customerSignBytes,
+                            //       );
+
+                            //   ref.read(selectedShopProvider.notifier).state =
+                            //       null;
+                            //   await generateAndOpenPdf(
+                            //     finalBill,
+                            //     previousBillsTallied,
+                            //     signBytes: customerSignBytes,
+                            //   );
+
+                            //   _resetSignature();
+                            // },
                             child: const Text(
                               'Generate PDF',
                               style: TextStyle(
@@ -679,18 +776,17 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            // final productAsync = ref.watch(productsProvider);
             return Padding(
               padding: const EdgeInsets.all(8.0),
               child: Dialog(
-                insetPadding: EdgeInsets.zero, // removes default margin
+                insetPadding: EdgeInsets.zero,
                 child: Container(
                   decoration: BoxDecoration(
                     color: const Color(0xFFE3F2FD),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   width: MediaQuery.of(context).size.width,
-                  // full screen width
+
                   height: MediaQuery.of(context).size.height * 0.8,
                   padding: const EdgeInsets.all(16),
 
@@ -730,7 +826,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                       Expanded(
                         child: productAsync.when(
                           data: (products) {
-                            // Setup controllers
                             for (var product in products) {
                               quantityControllers.putIfAbsent(
                                 product.id,
@@ -993,253 +1088,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
       },
     );
   }
-  // void _showProductSelectionDialog(AsyncValue<List<Product>> productAsync) {
-  //   final Map<String, TextEditingController> quantityControllers = {};
-  //   final Map<String, TextEditingController> priceControllers = {};
-  //   final searchController = TextEditingController();
-
-  //   showDialog(
-  //     context: context,
-  //     barrierDismissible: false,
-  //     builder: (context) {
-  //       return StatefulBuilder(
-  //         builder: (context, setState) {
-  //           // final productAsync = ref.watch(productsProvider);
-  //           return Padding(
-  //             padding: const EdgeInsets.all(8.0),
-  //             child: Dialog(
-  //               insetPadding: EdgeInsets.zero, // removes default margin
-  //               child: Container(
-  //                 decoration: BoxDecoration(
-  //                   color: const Color(0xFFE3F2FD),
-  //                   borderRadius: BorderRadius.circular(20),
-  //                 ),
-  //                 width: MediaQuery.of(context).size.width,
-  //                 // full screen width
-  //                 height: MediaQuery.of(context).size.height * 0.8,
-  //                 padding: const EdgeInsets.all(16),
-
-  //                 child: Column(
-  //                   crossAxisAlignment: CrossAxisAlignment.start,
-  //                   children: [
-  //                     const Text(
-  //                       'Select Products & Qty & Price',
-  //                       style: TextStyle(
-  //                         fontSize: 20,
-  //                         fontWeight: FontWeight.bold,
-  //                       ),
-  //                     ),
-  //                     const SizedBox(height: 12),
-  //                     TextField(
-  //                       cursorColor: const Color.fromARGB(255, 2, 113, 192),
-  //                       controller: searchController,
-  //                       onChanged: (_) => setState(() {}),
-  //                       decoration: InputDecoration(
-  //                         hintText: 'Search product by name...',
-  //                         prefixIcon: const Icon(Icons.search),
-  //                         filled: true,
-  //                         focusedBorder: OutlineInputBorder(
-  //                           borderRadius: BorderRadius.circular(20),
-  //                           borderSide: const BorderSide(
-  //                             color: Color.fromARGB(255, 2, 113, 192),
-  //                             width: 2,
-  //                           ),
-  //                         ),
-  //                         fillColor: Colors.white,
-  //                         border: OutlineInputBorder(
-  //                           borderRadius: BorderRadius.circular(20),
-  //                         ),
-  //                       ),
-  //                     ),
-  //                     const SizedBox(height: 12),
-  //                     Expanded(
-  //                       child: productAsync.when(
-  //                         data: (products) {
-  //                           // Setup controllers
-  //                           for (var product in products) {
-  //                             quantityControllers.putIfAbsent(
-  //                               product.id,
-  //                               () => TextEditingController(),
-  //                             );
-  //                             priceControllers.putIfAbsent(
-  //                               product.id,
-  //                               () => TextEditingController(),
-  //                             );
-  //                           }
-
-  //                           final filteredProducts =
-  //                               products
-  //                                   .where(
-  //                                     (p) => p.name.toLowerCase().contains(
-  //                                       searchController.text.toLowerCase(),
-  //                                     ),
-  //                                   )
-  //                                   .toList();
-
-  //                           if (filteredProducts.isEmpty) {
-  //                             return const Center(
-  //                               child: Text('No products found'),
-  //                             );
-  //                           }
-
-  //                           return ListView.separated(
-  //                             itemCount: filteredProducts.length,
-  //                             separatorBuilder:
-  //                                 (_, __) => const Divider(height: 1),
-  //                             itemBuilder: (context, index) {
-  //                               final product = filteredProducts[index];
-  //                               final qtyController =
-  //                                   quantityControllers[product.id]!;
-  //                               final priceController =
-  //                                   priceControllers[product.id]!;
-
-  //                               return ListTile(
-  //                                 title: Text(product.name),
-  //                                 trailing: SizedBox(
-  //                                   width: 200,
-  //                                   child: Row(
-  //                                     children: [
-  //                                       Expanded(
-  //                                         child: TextField(
-  //                                           cursorColor: const Color.fromARGB(
-  //                                             255,
-  //                                             2,
-  //                                             113,
-  //                                             192,
-  //                                           ),
-  //                                           controller: qtyController,
-  //                                           keyboardType: TextInputType.number,
-  //                                           decoration: const InputDecoration(
-  //                                             suffix: Text('Qty'),
-  //                                             contentPadding:
-  //                                                 EdgeInsets.symmetric(
-  //                                                   horizontal: 8,
-  //                                                   vertical: 10,
-  //                                                 ),
-  //                                             focusedBorder:
-  //                                                 UnderlineInputBorder(
-  //                                                   borderSide: BorderSide(
-  //                                                     color: Color.fromARGB(
-  //                                                       255,
-  //                                                       2,
-  //                                                       113,
-  //                                                       192,
-  //                                                     ),
-  //                                                   ),
-  //                                                 ),
-  //                                           ),
-  //                                         ),
-  //                                       ),
-  //                                       const SizedBox(width: 8),
-  //                                       Expanded(
-  //                                         child: TextField(
-  //                                           cursorColor: const Color.fromARGB(
-  //                                             255,
-  //                                             2,
-  //                                             113,
-  //                                             192,
-  //                                           ),
-  //                                           controller: priceController,
-  //                                           keyboardType: TextInputType.number,
-  //                                           decoration: const InputDecoration(
-  //                                             suffix: Text('\$'),
-  //                                             contentPadding:
-  //                                                 EdgeInsets.symmetric(
-  //                                                   horizontal: 8,
-  //                                                   vertical: 10,
-  //                                                 ),
-  //                                             focusedBorder:
-  //                                                 UnderlineInputBorder(
-  //                                                   borderSide: BorderSide(
-  //                                                     color: Color.fromARGB(
-  //                                                       255,
-  //                                                       2,
-  //                                                       113,
-  //                                                       192,
-  //                                                     ),
-  //                                                   ),
-  //                                                 ),
-  //                                           ),
-  //                                         ),
-  //                                       ),
-  //                                     ],
-  //                                   ),
-  //                                 ),
-  //                               );
-  //                             },
-  //                           );
-  //                         },
-  //                         loading:
-  //                             () => const Center(
-  //                               child: CircularProgressIndicator(
-  //                                 color: Color.fromARGB(255, 2, 113, 192),
-  //                               ),
-  //                             ),
-  //                         error:
-  //                             (_, __) => const Center(
-  //                               child: Text('Failed to load products'),
-  //                             ),
-  //                       ),
-  //                     ),
-  //                     const SizedBox(height: 12),
-  //                     Row(
-  //                       mainAxisAlignment: MainAxisAlignment.end,
-  //                       children: [
-  //                         TextButton(
-  //                           onPressed: () => Navigator.pop(context),
-  //                           child: const Text(
-  //                             'Cancel',
-  //                             style: TextStyle(color: Colors.red),
-  //                           ),
-  //                         ),
-  //                         const SizedBox(width: 12),
-  //                         ElevatedButton(
-  //                           style: const ButtonStyle(
-  //                             backgroundColor: WidgetStatePropertyAll(
-  //                               Colors.white,
-  //                             ),
-  //                           ),
-  //                           onPressed: () {
-  //                             final products =
-  //                                 ref.read(productsProvider).asData?.value ??
-  //                                 [];
-  //                             for (var product in products) {
-  //                               final qtyStr =
-  //                                   quantityControllers[product.id]?.text
-  //                                       .trim() ??
-  //                                   '0';
-  //                               final prcStr =
-  //                                   priceControllers[product.id]?.text.trim() ??
-  //                                   '0';
-  //                               final qty = int.tryParse(qtyStr) ?? 0;
-  //                               final prc = double.tryParse(prcStr) ?? 0;
-  //                               if (qty > 0) {
-  //                                 ref
-  //                                     .read(billingProvider.notifier)
-  //                                     .addItem(product, qty, prc);
-  //                               }
-  //                             }
-  //                             Navigator.pop(context);
-  //                           },
-  //                           child: const Text(
-  //                             'Done',
-  //                             style: TextStyle(
-  //                               color: Color.fromARGB(255, 0, 161, 5),
-  //                             ),
-  //                           ),
-  //                         ),
-  //                       ],
-  //                     ),
-  //                   ],
-  //                 ),
-  //               ),
-  //             ),
-  //           );
-  //         },
-  //       );
-  //     },
-  //   );
-  // }
 
   void _resetSignature() {
     setState(() {
@@ -1427,10 +1275,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                       color: Colors.red,
                                     ),
                                     onPressed: () {
-                                      //   ref
-                                      //       .read(billingProvider.notifier)
-                                      //       .removeItem(item);
-                                      // },
                                       _showDeleteDialog(context, item);
                                     },
                                   ),

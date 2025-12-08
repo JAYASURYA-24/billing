@@ -2,10 +2,8 @@ import 'package:billing/core/utils/loading.dart';
 import 'package:billing/features/providers/bill_provider.dart';
 import 'package:billing/features/providers/role_provider.dart';
 import 'package:billing/features/screens/deletedBills.dart';
-import 'package:billing/features/screens/login_screen.dart';
 
 import 'package:billing/features/services/pdfservices.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,7 +14,7 @@ import 'package:pdf/pdf.dart';
 import '../models/bill.dart';
 import '../services/firestore_services.dart';
 import 'package:month_picker_dialog/month_picker_dialog.dart';
-import 'package:excel/excel.dart' as xls;
+
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -42,7 +40,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
   // Filter variables
   DateTime? selectedDate;
   DateTime? selectedMonth;
-  String filterType = 'none'; // 'none', 'date', 'month'
+  String filterType = 'none';
 
   @override
   void initState() {
@@ -61,7 +59,6 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
   bool _matchesDateFilter(Bill bill) {
     if (filterType == 'none') return true;
 
-    // pick correct date based on isPaid
     final DateTime? billDate =
         bill.isPaid ? bill.markedAsPaidAt?.toDate() : bill.createdAt.toDate();
 
@@ -118,7 +115,6 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
           .toList();
     }
 
-    // ✅ Apply date filter when filterType != none
     return shopsData
         .map((shopData) {
           final List<Bill> bills = shopData['bills'] as List<Bill>;
@@ -170,12 +166,8 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
       final List<Bill> bills = shopData['bills'] as List<Bill>;
 
       for (final bill in bills) {
-        // ✅ Select date field based on isPaid
         final DateTime? billDate =
-            isPaid
-                ? bill.markedAsPaidAt
-                    ?.toDate() // paid → use markedAsPaidAt
-                : bill.createdAt.toDate(); // unpaid → use createdAt
+            isPaid ? bill.markedAsPaidAt?.toDate() : bill.createdAt.toDate();
 
         if (billDate == null) continue;
 
@@ -186,12 +178,10 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
         );
         final todayOnly = DateTime(today.year, today.month, today.day);
 
-        // Check if bill matches today
         if (billDateOnly.isAtSameMomentAs(todayOnly)) {
           dailyTotal += isPaid ? bill.discountedTotal : bill.balance;
         }
 
-        // Check if bill matches current month
         if (billDate.year == currentMonth.year &&
             billDate.month == currentMonth.month) {
           monthlyTotal += isPaid ? bill.discountedTotal : bill.balance;
@@ -213,10 +203,8 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
       padding: const EdgeInsets.all(8.0),
       child: Column(
         children: [
-          // Filter Chips Row
           Row(
             children: [
-              // Date Filter Chip
               FilterChip(
                 selected: filterType == 'date',
                 label: Text(
@@ -236,17 +224,11 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                       builder: (BuildContext context, Widget? child) {
                         return Theme(
                           data: Theme.of(context).copyWith(
-                            dialogBackgroundColor:
-                                Colors.blueGrey[900], // 🔹 background color
+                            dialogBackgroundColor: Colors.blueGrey[900],
                             colorScheme: ColorScheme.light(
-                              primary: Color.fromARGB(
-                                255,
-                                2,
-                                113,
-                                192,
-                              ), // header background color
-                              onPrimary: Colors.white, // header text color
-                              onSurface: Colors.black, // body text color
+                              primary: Color.fromARGB(255, 2, 113, 192),
+                              onPrimary: Colors.white,
+                              onSurface: Colors.black,
                             ),
                             textButtonTheme: TextButtonThemeData(
                               style: TextButton.styleFrom(
@@ -255,7 +237,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                   2,
                                   113,
                                   192,
-                                ), // button text color
+                                ),
                               ),
                             ),
                           ),
@@ -280,7 +262,6 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
               ),
               const SizedBox(width: 8),
 
-              // Month Filter Chip
               FilterChip(
                 selected: filterType == 'month',
                 label: Text(
@@ -313,7 +294,6 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                 },
               ),
 
-              // Clear Filter Button
               if (filterType != 'none') ...[
                 const SizedBox(width: 8),
                 IconButton(
@@ -333,11 +313,9 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
 
           const SizedBox(height: 8),
 
-          // Daily and Monthly Totals Row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Daily Total
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -377,7 +355,6 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                 ),
               ),
 
-              // Monthly Total
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -423,238 +400,240 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
     );
   }
 
-  // Future<void> _generateReportExcel(
+  // Future<void> _generateReportPdf(
   //   BuildContext context,
   //   WidgetRef ref,
   //   DateTime date,
   // ) async {
   //   final firestore = ref.read(firestoreServiceProvider);
+  //   // final result = await firestore.fetchBillsByDate(date);
 
-  //   // Fetch bills for that date (make sure you implemented this in FirestoreService)
-  //   final bills = await firestore.fetchBillsByDate(date);
+  //   // final createdUpi = result["created"]?["upi"] ?? <Bill>[];
+  //   // final createdCash = result["created"]?["cash"] ?? <Bill>[];
+  //   // final createdUnpaid = result["created"]?["unpaid"] ?? <Bill>[];
 
-  //   double totalAmount = 0;
-  //   double totalPaid = 0;
-  //   double totalUnpaid = 0;
+  //   // final paidTodayUpi = result["paidToday"]?["upi"] ?? <Bill>[];
+  //   // final paidTodayCash = result["paidToday"]?["cash"] ?? <Bill>[];
+  //   print("STEP 1: Starting PDF...");
+  //   final result = await firestore.fetchBillsByDate(date);
+  //   print("STEP 2: Data fetched");
 
-  //   for (var bill in bills) {
-  //     totalAmount += bill.discountedTotal;
-  //     if (bill.isPaid) {
-  //       totalPaid += bill.paidAmount;
-  //     } else {
-  //       totalUnpaid += bill.balance;
-  //     }
+  //   final createdUpi = result["created"]?["upi"] ?? <Bill>[];
+  //   final createdCash = result["created"]?["cash"] ?? <Bill>[];
+  //   final createdUnpaid = result["created"]?["unpaid"] ?? <Bill>[];
+
+  //   print(
+  //     "STEP 3: Created bills: "
+  //     "UPI=${createdUpi.length}, Cash=${createdCash.length}, Unpaid=${createdUnpaid.length}",
+  //   );
+
+  //   final paidTodayUpi = result["paidToday"]?["upi"] ?? <Bill>[];
+  //   final paidTodayCash = result["paidToday"]?["cash"] ?? <Bill>[];
+
+  //   print(
+  //     "STEP 4: Paid Today: UPI=${paidTodayUpi.length}, Cash=${paidTodayCash.length}",
+  //   );
+
+  //   print("STEP 5: Building PDF...");
+
+  //   // -------------------
+  //   // Remove duplicates
+  //   // -------------------
+  //   List<Bill> removeDuplicateBills(List<Bill> bills) {
+  //     final seen = <String>{};
+  //     return bills.where((b) => seen.add(b.id)).toList();
   //   }
 
-  //   // Create Excel
-  //   final excel = xls.Excel.createExcel();
-  //   final sheet = excel['Report'];
-
-  //   // Header row
-  //   sheet.appendRow([
-  //     xls.TextCellValue('Shop Name'),
-  //     xls.TextCellValue('Bill Number'),
-  //     xls.TextCellValue("Created At"),
-  //     xls.TextCellValue("Paid At"),
-  //     xls.TextCellValue('Total Amount'),
-  //     // xls.TextCellValue('Paid Amount'),
-  //     xls.TextCellValue('Balance'),
-  //     xls.TextCellValue('Status'),
+  //   final allCreated = removeDuplicateBills([
+  //     ...createdUpi,
+  //     ...createdCash,
+  //     ...createdUnpaid,
   //   ]);
 
-  //   // Bill rows
-  //   for (var bill in bills) {
-  //     final createdAtFormatted = DateFormat(
-  //       'dd-MM-yy',
-  //     ).format((bill.createdAt as Timestamp).toDate());
-  //     final paidAtFormatted =
-  //         bill.markedAsPaidAt != null
-  //             ? DateFormat(
-  //               'dd-MM-yy',
-  //             ).format((bill.markedAsPaidAt as Timestamp).toDate())
-  //             : "-"; // show dash if null
+  //   final allPaidToday = removeDuplicateBills([
+  //     ...paidTodayUpi,
+  //     ...paidTodayCash,
+  //   ]);
 
-  //     sheet.appendRow([
-  //       xls.TextCellValue(bill.shopName),
-  //       xls.TextCellValue(bill.billNumber),
-  //       xls.TextCellValue(createdAtFormatted),
-  //       xls.TextCellValue(paidAtFormatted),
+  //   // -------------------
+  //   // Totals
+  //   // -------------------
+  //   double sumTotal(List<Bill> bills) =>
+  //       bills.fold(0.0, (sum, b) => sum + (b.discountedTotal ?? 0.0));
 
-  //       xls.DoubleCellValue(bill.discountedTotal),
-  //       // xls.DoubleCellValue(bill.paidAmount),
-  //       xls.DoubleCellValue(bill.balance),
-  //       xls.TextCellValue(bill.isPaid ? "Paid" : "Unpaid"),
-  //     ]);
+  //   final createdUpiTotal = sumTotal(createdUpi);
+  //   final createdCashTotal = sumTotal(createdCash);
+  //   final createdUnpaidTotal = sumTotal(createdUnpaid);
+
+  //   final paidTodayUpiTotal = sumTotal(paidTodayUpi);
+  //   final paidTodayCashTotal = sumTotal(paidTodayCash);
+
+  //   final overallCreatedTotal =
+  //       createdUpiTotal + createdCashTotal + createdUnpaidTotal;
+  //   final overallOutstandingTotal = paidTodayUpiTotal + paidTodayCashTotal;
+
+  //   final pdf = pw.Document();
+
+  //   // -------------------
+  //   // Bill Status Helper
+  //   // -------------------
+  //   String getBillStatus(Bill b) {
+  //     if (b.isPaid == false) return "Unpaid";
+  //     if (b.upiPayment == true) return "UPI";
+  //     return "Cash";
   //   }
 
-  //   // Add summary row
-  //   sheet.appendRow([]);
-  //   sheet.appendRow([
-  //     xls.TextCellValue("TOTAL"),
-  //     xls.TextCellValue(""),
-  //     xls.TextCellValue(""),
-  //     xls.DoubleCellValue(totalAmount),
-  //     xls.DoubleCellValue(totalPaid),
-  //     xls.DoubleCellValue(totalUnpaid),
-  //     xls.TextCellValue(""),
-  //   ]);
+  //   // -------------------
+  //   // Build a COMPLETE section (title + table together)
+  //   // -------------------
+  //   pw.Widget buildCompleteSection(String title, List<Bill> bills) {
+  //     final data = List.generate(bills.length, (i) {
+  //       final b = bills[i];
+  //       return [
+  //         (i + 1).toString(),
+  //         b.shopName ?? "",
+  //         getBillStatus(b),
+  //         (b.discountedTotal ?? 0.0).toStringAsFixed(2),
+  //         b.billNumber ?? "",
+  //       ];
+  //     });
 
-  //   // Save file
-  //   final dir = await getApplicationDocumentsDirectory();
-  //   print("getttinggg enterdddddd");
-  //   final path =
-  //       "${dir.path}/Bills_Report_${DateFormat('ddMMyyyy').format(date)}.xlsx";
-  //   final fileBytes = excel.encode();
-  //   if (fileBytes != null) {
-  //     final file =
-  //         File(path)
-  //           ..createSync(recursive: true)
-  //           ..writeAsBytesSync(fileBytes);
+  //     return pw.Column(
+  //       crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //       children: [
+  //         pw.Center(
+  //           child: pw.Text(
+  //             title,
+  //             style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+  //           ),
+  //         ),
+  //         pw.SizedBox(height: 8),
 
-  //     // Open Excel file
-  //     await OpenFilex.open(file.path);
-  //   } else {
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       const SnackBar(content: Text("Failed to generate Excel file")),
+  //         pw.Table.fromTextArray(
+  //           headers: ['S.No', 'Shop', 'Status', 'Amount', 'Bill No'],
+  //           data: data,
+  //           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+  //           cellAlignment: pw.Alignment.centerLeft,
+  //           headerDecoration: pw.BoxDecoration(
+  //             border: pw.Border(bottom: pw.BorderSide(width: 0.5)),
+  //           ),
+  //         ),
+
+  //         pw.SizedBox(height: 20),
+  //       ],
   //     );
   //   }
+
+  //   // -------------------
+  //   // Safe Section → keeps whole section together
+  //   // -------------------
+  //   pw.Widget safeSection(String title, List<Bill> bills) {
+  //     return pw.Column(
+  //       children: [
+  //         // pw.PageBreak(), // only breaks when not enough space
+  //         buildCompleteSection(title, bills),
+  //       ],
+  //     );
+  //   }
+
+  //   // -------------------
+  //   // Build PDF
+  //   // -------------------
+  //   pdf.addPage(
+  //     pw.MultiPage(
+  //       pageFormat: PdfPageFormat.a4,
+  //       margin: const pw.EdgeInsets.all(20),
+  //       build:
+  //           (context) => [
+  //             pw.Text(
+  //               'Bills Report - ${DateFormat('dd/MM/yyyy').format(date)}',
+  //               style: pw.TextStyle(
+  //                 fontSize: 18,
+  //                 fontWeight: pw.FontWeight.bold,
+  //               ),
+  //             ),
+  //             pw.SizedBox(height: 12),
+
+  //             // SAFE SECTIONS (auto page break, full section stays together)
+  //             // safeSection("Created Bills", allCreated),
+  //             // safeSection("Outstanding Paid Today", allPaidToday),
+  //             buildCompleteSection("Created Bills", allCreated),
+  //             buildCompleteSection("Outstanding Paid Today", allPaidToday),
+
+  //             pw.SizedBox(height: 20),
+  //             pw.Divider(),
+
+  //             pw.Text(
+  //               "Summary",
+  //               style: pw.TextStyle(
+  //                 fontSize: 16,
+  //                 fontWeight: pw.FontWeight.bold,
+  //               ),
+  //             ),
+  //             pw.SizedBox(height: 8),
+
+  //             pw.Row(
+  //               crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //               children: [
+  //                 pw.Column(
+  //                   crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //                   children: [
+  //                     pw.Text(
+  //                       "Created Bills",
+  //                       style: pw.TextStyle(
+  //                         fontSize: 14,
+  //                         fontWeight: pw.FontWeight.bold,
+  //                       ),
+  //                     ),
+  //                     pw.SizedBox(height: 6),
+  //                     pw.Text("UPI : ${createdUpiTotal.toStringAsFixed(2)}"),
+  //                     pw.Text("Cash : ${createdCashTotal.toStringAsFixed(2)}"),
+  //                     pw.Text(
+  //                       "Unpaid : ${createdUnpaidTotal.toStringAsFixed(2)}",
+  //                     ),
+  //                     pw.SizedBox(height: 6),
+  //                     pw.Text(
+  //                       "Total : ${overallCreatedTotal.toStringAsFixed(2)}",
+  //                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+  //                     ),
+  //                   ],
+  //                 ),
+  //                 pw.Column(
+  //                   crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //                   children: [
+  //                     pw.Text(
+  //                       "Outstanding Paid Today",
+  //                       style: pw.TextStyle(
+  //                         fontSize: 14,
+  //                         fontWeight: pw.FontWeight.bold,
+  //                       ),
+  //                     ),
+  //                     pw.SizedBox(height: 6),
+  //                     pw.Text("UPI : ${paidTodayUpiTotal.toStringAsFixed(2)}"),
+  //                     pw.Text(
+  //                       "Cash : ${paidTodayCashTotal.toStringAsFixed(2)}",
+  //                     ),
+  //                     pw.SizedBox(height: 6),
+  //                     pw.Text(
+  //                       "Total : ${overallOutstandingTotal.toStringAsFixed(2)}",
+  //                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+  //                     ),
+  //                   ],
+  //                 ),
+  //               ],
+  //             ),
+  //           ],
+  //     ),
+  //   );
+
+  //   final dir = await getApplicationDocumentsDirectory();
+  //   final path =
+  //       "${dir.path}/Bills_Report_${DateFormat('ddMMyyyy').format(date)}.pdf";
+  //   final file = File(path);
+  //   await file.writeAsBytes(await pdf.save());
+  //   await OpenFilex.open(file.path);
   // }
-  Future<void> _generateReportExcel(
-    BuildContext context,
-    WidgetRef ref,
-    DateTime date,
-  ) async {
-    final firestore = ref.read(firestoreServiceProvider);
-    final result = await firestore.fetchBillsByDate(date);
-
-    final createdBills = result["created"] ?? [];
-    final paidBills = result["paid"] ?? [];
-
-    final excel = xls.Excel.createExcel();
-    final sheet = excel['Report'];
-
-    // ==== Section 1: Created Bills ====
-    sheet.appendRow([
-      xls.TextCellValue(
-        "Created Bills on ${DateFormat('dd-MM-yy').format(date)}",
-      ),
-    ]);
-    sheet.appendRow([
-      xls.TextCellValue('Shop Name'),
-      xls.TextCellValue('Bill Number'),
-      xls.TextCellValue("Created At"),
-      xls.TextCellValue('Total Amount'),
-      xls.TextCellValue('Balance'),
-      xls.TextCellValue('Status'),
-    ]);
-
-    double createdTotal = 0;
-    double createdPaid = 0;
-    double createdUnpaid = 0;
-
-    for (var bill in createdBills) {
-      createdTotal += bill.discountedTotal;
-      if (bill.isPaid) {
-        createdPaid += bill.paidAmount;
-      } else {
-        createdUnpaid += bill.balance;
-      }
-
-      sheet.appendRow([
-        xls.TextCellValue(bill.shopName),
-        xls.TextCellValue(bill.billNumber),
-        xls.TextCellValue(
-          DateFormat('dd-MM-yy').format((bill.createdAt as Timestamp).toDate()),
-        ),
-        xls.DoubleCellValue(bill.discountedTotal),
-        xls.DoubleCellValue(bill.balance),
-        xls.TextCellValue(bill.isPaid ? "Paid" : "Unpaid"),
-      ]);
-    }
-
-    // Totals for created bills
-    sheet.appendRow([
-      xls.TextCellValue(""),
-      xls.TextCellValue(""),
-      xls.TextCellValue("Totals"),
-      xls.DoubleCellValue(createdTotal),
-      xls.DoubleCellValue(createdUnpaid),
-      xls.TextCellValue("Created & Paid: $createdPaid"),
-    ]);
-
-    // ==== Section 2: Outstanding (Paid Bills) ====
-    sheet.appendRow([]);
-    sheet.appendRow([
-      xls.TextCellValue(
-        "Outstanding Bills (Paid on ${DateFormat('dd-MM-yy').format(date)})",
-      ),
-    ]);
-    sheet.appendRow([
-      xls.TextCellValue('Shop Name'),
-      xls.TextCellValue('Bill Number'),
-      xls.TextCellValue("Paid At"),
-      xls.TextCellValue('Paid Amount'),
-      xls.TextCellValue('Status'),
-    ]);
-
-    double paidTotal = 0;
-    for (var bill in paidBills) {
-      paidTotal += bill.paidAmount;
-
-      sheet.appendRow([
-        xls.TextCellValue(bill.shopName),
-        xls.TextCellValue(bill.billNumber),
-        xls.TextCellValue(
-          DateFormat(
-            'dd-MM-yy',
-          ).format((bill.markedAsPaidAt as Timestamp).toDate()),
-        ),
-        xls.DoubleCellValue(bill.paidAmount),
-        xls.TextCellValue("Paid"),
-      ]);
-    }
-
-    // Totals for outstanding bills
-    sheet.appendRow([
-      xls.TextCellValue(""),
-      xls.TextCellValue(""),
-      xls.TextCellValue("Total Marked as Paid Today"),
-      xls.DoubleCellValue(paidTotal),
-    ]);
-
-    for (var bill in paidBills) {
-      sheet.appendRow([
-        xls.TextCellValue(bill.shopName),
-        xls.TextCellValue(bill.billNumber),
-        xls.TextCellValue(
-          DateFormat(
-            'dd-MM-yy',
-          ).format((bill.markedAsPaidAt as Timestamp).toDate()),
-        ),
-        xls.DoubleCellValue(bill.paidAmount),
-        xls.TextCellValue("Paid"),
-      ]);
-    }
-
-    // Save & open
-    final dir = await getApplicationDocumentsDirectory();
-    final path =
-        "${dir.path}/Bills_Report_${DateFormat('ddMMyyyy').format(date)}.xlsx";
-    final fileBytes = excel.encode();
-
-    if (fileBytes != null) {
-      final file =
-          File(path)
-            ..createSync(recursive: true)
-            ..writeAsBytesSync(fileBytes);
-      await OpenFilex.open(file.path);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to generate Excel file")),
-      );
-    }
-  }
-
   Future<void> _generateReportPdf(
     BuildContext context,
     WidgetRef ref,
@@ -662,157 +641,566 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
   ) async {
     final firestore = ref.read(firestoreServiceProvider);
 
-    // Fetch bills separately (created vs paid)
+    print("STEP 1: Starting PDF...");
     final result = await firestore.fetchBillsByDate(date);
-    final createdBills = result["created"] ?? [];
-    final paidBills = result["paid"] ?? [];
+    print("STEP 2: Data fetched");
 
+    final createdUpi = result["created"]?["upi"] ?? <Bill>[];
+    final createdCash = result["created"]?["cash"] ?? <Bill>[];
+    final createdUnpaid = result["created"]?["unpaid"] ?? <Bill>[];
+
+    print(
+      "STEP 3: Created bills: UPI=${createdUpi.length}, Cash=${createdCash.length}, Unpaid=${createdUnpaid.length}",
+    );
+
+    final paidTodayUpi = result["paidToday"]?["upi"] ?? <Bill>[];
+    final paidTodayCash = result["paidToday"]?["cash"] ?? <Bill>[];
+
+    print(
+      "STEP 4: Paid Today: UPI=${paidTodayUpi.length}, Cash=${paidTodayCash.length}",
+    );
+
+    // -------------------
+    // Remove duplicates
+    // -------------------
+    List<Bill> removeDuplicateBills(List<Bill> bills) {
+      final seen = <String>{};
+      return bills.where((b) => seen.add(b.id)).toList();
+    }
+
+    final allCreated = removeDuplicateBills([
+      ...createdUpi,
+      ...createdCash,
+      ...createdUnpaid,
+    ]);
+
+    final allPaidToday = removeDuplicateBills([
+      ...paidTodayUpi,
+      ...paidTodayCash,
+    ]);
+
+    // -------------------
     // Totals
-    double createdTotal = 0;
-    double createdUnpaid = 0;
-    double createdPaid = 0;
+    // -------------------
+    double sumTotal(List<Bill> bills) =>
+        bills.fold(0.0, (sum, b) => sum + (b.discountedTotal ?? 0.0));
 
-    for (var bill in createdBills) {
-      createdTotal += bill.discountedTotal;
-      if (bill.isPaid) {
-        createdPaid += bill.paidAmount;
-      } else {
-        createdUnpaid += bill.balance;
-      }
+    final createdUpiTotal = sumTotal(createdUpi);
+    final createdCashTotal = sumTotal(createdCash);
+    final createdUnpaidTotal = sumTotal(createdUnpaid);
+
+    final paidTodayUpiTotal = sumTotal(paidTodayUpi);
+    final paidTodayCashTotal = sumTotal(paidTodayCash);
+
+    final overallCreatedTotal =
+        createdUpiTotal + createdCashTotal + createdUnpaidTotal;
+    final overallOutstandingTotal = paidTodayUpiTotal + paidTodayCashTotal;
+
+    print("STEP 5: Loading fonts...");
+    final fontRegular = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'),
+    );
+    final fontBold = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'),
+    );
+
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(base: fontRegular, bold: fontBold),
+    );
+
+    // -------------------
+    // Bill Status Helper
+    // -------------------
+    String getBillStatus(Bill b) {
+      if (b.isPaid == false) return "Unpaid";
+      if (b.upiPayment == true) return "UPI";
+      return "Cash";
     }
 
-    double paidTotal = 0;
-    for (var bill in paidBills) {
-      paidTotal += bill.paidAmount;
+    // -------------------
+    // Build a COMPLETE section (title + table)
+    // -------------------
+    // pw.Widget buildCompleteSection(String title, List<Bill> bills) {
+    //   final data = List.generate(bills.length, (i) {
+    //     final b = bills[i];
+    //     return [
+    //       (i + 1).toString(),
+    //       b.shopName ?? "",
+    //       getBillStatus(b),
+    //       (b.discountedTotal ?? 0.0).toStringAsFixed(2),
+    //       b.billNumber ?? "",
+    //     ];
+    //   });
+
+    //   return pw.Column(
+    //     crossAxisAlignment: pw.CrossAxisAlignment.start,
+    //     children: [
+    //       pw.Center(
+    //         child: pw.Text(
+    //           title,
+    //           style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+    //         ),
+    //       ),
+    //       pw.SizedBox(height: 8),
+    //       pw.Table.fromTextArray(
+    //         headers: ['S.No', 'Shop', 'Status', 'Amount', 'Bill No'],
+    //         data: data,
+    //         headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+    //         cellAlignment: pw.Alignment.centerLeft,
+    //         headerDecoration: pw.BoxDecoration(
+    //           border: pw.Border(bottom: pw.BorderSide(width: 0.5)),
+    //         ),
+    //       ),
+    //       pw.SizedBox(height: 20),
+    //     ],
+    //   );
+    // }
+
+    pw.Widget buildCompleteSection(
+      String title,
+      List<Bill> bills,
+      int startIndex,
+    ) {
+      final data = List.generate(bills.length, (i) {
+        final b = bills[i];
+        return [
+          (startIndex + i + 1).toString(), // <-- continue serial number
+          b.shopName ?? "",
+          getBillStatus(b),
+          (b.discountedTotal ?? 0.0).toStringAsFixed(2),
+          b.billNumber ?? "",
+        ];
+      });
+
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Center(
+            child: pw.Text(
+              title,
+              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+            ),
+          ),
+          pw.SizedBox(height: 8),
+          pw.Table.fromTextArray(
+            headers: ['S.No', 'Shop', 'Status', 'Amount', 'Bill No'],
+            data: data,
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            cellAlignment: pw.Alignment.centerLeft,
+            headerDecoration: pw.BoxDecoration(
+              border: pw.Border(bottom: pw.BorderSide(width: 0.5)),
+            ),
+          ),
+          pw.SizedBox(height: 20),
+        ],
+      );
     }
 
-    // Create PDF document
-    final pdf = pw.Document();
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(20),
-        build:
-            (context) => [
-              pw.Text(
-                'Bills Report - ${DateFormat('dd/MM/yyyy').format(date)}',
-                style: pw.TextStyle(
-                  fontSize: 18,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 16),
-
-              // Section 1: Created Bills
-              pw.Text(
-                "Created Bills",
-                style: pw.TextStyle(
-                  fontSize: 14,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.Table.fromTextArray(
-                headers: [
-                  'Shop Name',
-                  'Bill Number',
-                  'Created At',
-                  'Total',
-                  'Balance',
-                  'Status',
-                ],
-                data:
-                    createdBills.map((b) {
-                      return [
-                        b.shopName,
-                        b.billNumber,
-                        DateFormat(
-                          'dd-MM',
-                        ).format((b.createdAt as Timestamp).toDate()),
-                        b.discountedTotal.toStringAsFixed(2),
-                        b.balance.toStringAsFixed(2),
-                        b.isPaid ? "Paid" : "Unpaid",
-                      ];
-                    }).toList(),
-              ),
-              pw.SizedBox(height: 8),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+    // -------------------
+    // Build summary section
+    // -------------------
+    pw.Widget buildSummarySection() {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            "Summary",
+            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 8),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
-                    "Today Total Amount: ${createdTotal.toStringAsFixed(2)}",
+                    "Created Bills",
                     style: pw.TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       fontWeight: pw.FontWeight.bold,
                     ),
                   ),
+                  pw.SizedBox(height: 6),
+                  pw.Text("UPI : ${createdUpiTotal.toStringAsFixed(2)}"),
+                  pw.Text("Cash : ${createdCashTotal.toStringAsFixed(2)}"),
+                  pw.Text("Unpaid : ${createdUnpaidTotal.toStringAsFixed(2)}"),
+                  pw.SizedBox(height: 6),
                   pw.Text(
-                    "Paid: ${createdPaid.toStringAsFixed(2)}",
-                    style: pw.TextStyle(
-                      fontSize: 12,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.Text(
-                    "Unpaid: ${createdUnpaid.toStringAsFixed(2)}",
-                    style: pw.TextStyle(
-                      fontSize: 12,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
+                    "Total : ${overallCreatedTotal.toStringAsFixed(2)}",
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                   ),
                 ],
               ),
-
-              pw.SizedBox(height: 20),
-
-              // Section 2: Outstanding (Paid Today)
-              pw.Text(
-                "Outstanding (Paid Today)",
-                style: pw.TextStyle(
-                  fontSize: 14,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.Table.fromTextArray(
-                headers: ['Shop Name', 'Bill Number', 'Paid At', 'Paid Amount'],
-                data:
-                    paidBills.map((b) {
-                      return [
-                        b.shopName,
-                        b.billNumber,
-                        DateFormat(
-                          'dd-MM',
-                        ).format((b.markedAsPaidAt as Timestamp).toDate()),
-                        b.paidAmount.toStringAsFixed(2),
-                      ];
-                    }).toList(),
-              ),
-              pw.SizedBox(height: 8),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.start,
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
-                    "Outstanding Paid Today: ${paidTotal.toStringAsFixed(2)}",
+                    "Outstanding Paid Today",
                     style: pw.TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       fontWeight: pw.FontWeight.bold,
                     ),
+                  ),
+                  pw.SizedBox(height: 6),
+                  pw.Text("UPI : ${paidTodayUpiTotal.toStringAsFixed(2)}"),
+                  pw.Text("Cash : ${paidTodayCashTotal.toStringAsFixed(2)}"),
+                  pw.SizedBox(height: 6),
+                  pw.Text(
+                    "Total : ${overallOutstandingTotal.toStringAsFixed(2)}",
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                   ),
                 ],
               ),
             ],
+          ),
+        ],
+      );
+    }
+
+    // -------------------
+    // Helper to split bills into chunks (for large tables)
+    // -------------------
+    List<List<Bill>> splitBills(List<Bill> bills, int chunkSize) {
+      List<List<Bill>> chunks = [];
+      for (var i = 0; i < bills.length; i += chunkSize) {
+        final end =
+            (i + chunkSize < bills.length) ? i + chunkSize : bills.length;
+        chunks.add(bills.sublist(i, end));
+      }
+      return chunks;
+    }
+
+    // -------------------
+    // Split tables into manageable chunks
+    // -------------------
+    final createdChunks = splitBills(allCreated, 25);
+    final paidTodayChunks = splitBills(allPaidToday, 26);
+
+    // -------------------
+    // Add pages for Created Bills
+    // -------------------
+    // for (var chunk in createdChunks) {
+    //   pdf.addPage(
+    //     pw.MultiPage(
+    //       pageFormat: PdfPageFormat.a4,
+    //       margin: const pw.EdgeInsets.all(20),
+    //       build:
+    //           (context) => [
+    //             pw.Text(
+    //               'Bills Report - ${DateFormat('dd/MM/yyyy').format(date)}',
+    //               style: pw.TextStyle(
+    //                 fontSize: 18,
+    //                 fontWeight: pw.FontWeight.bold,
+    //               ),
+    //             ),
+    //             pw.SizedBox(height: 12),
+    //             buildCompleteSection("Created Bills", chunk),
+    //           ],
+    //     ),
+    //   );
+    // }
+
+    int serial = 0; // global serial for Created Bills
+
+    // -------------------
+    // Created Bills Section
+    // -------------------
+
+    for (var i = 0; i < createdChunks.length; i++) {
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(20),
+          build: (context) {
+            final children = <pw.Widget>[];
+            // Only print title and date for the first chunk
+            if (i == 0) {
+              children.add(
+                pw.Text(
+                  'Bills Report - ${DateFormat('dd/MM/yyyy').format(date)}',
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              );
+              children.add(pw.SizedBox(height: 12));
+            }
+
+            children.add(
+              buildCompleteSection("Created Bills", createdChunks[i], serial),
+            );
+
+            serial += createdChunks[i].length;
+            return children;
+          },
+        ),
+      );
+    }
+
+    // -------------------
+    // Outstanding Paid Today Section
+    // -------------------
+    serial = 0; // reset serial for new section
+
+    for (var i = 0; i < paidTodayChunks.length; i++) {
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(20),
+          build: (context) {
+            final children = <pw.Widget>[];
+            // Only print section title on the first chunk
+            // if (i == 0) {
+            //   children.add(
+            //     pw.Text(
+            //       'Outstanding Paid Today',
+            //       style: pw.TextStyle(
+            //         fontSize: 18,
+            //         fontWeight: pw.FontWeight.bold,
+            //       ),
+            //     ),
+            //   );
+            //   children.add(pw.SizedBox(height: 12));
+            // }
+
+            children.add(
+              buildCompleteSection(
+                "Outstanding Paid Today",
+                paidTodayChunks[i],
+                serial,
+              ),
+            );
+            serial += paidTodayChunks[i].length;
+            return children;
+          },
+        ),
+      );
+    }
+
+    // -------------------
+    // Summary Page
+    // -------------------
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        build: (context) => [buildSummarySection()],
       ),
     );
 
+    // -------------------
+    // Save PDF
+    // -------------------
     final dir = await getApplicationDocumentsDirectory();
     final path =
         "${dir.path}/Bills_Report_${DateFormat('ddMMyyyy').format(date)}.pdf";
     final file = File(path);
     await file.writeAsBytes(await pdf.save());
-
     await OpenFilex.open(file.path);
+
+    print("PDF Generated at: $path");
   }
 
+  // Future<void> _generateReportPdf(
+  //   BuildContext context,
+  //   WidgetRef ref,
+  //   DateTime date,
+  // ) async {
+  //   final firestore = ref.read(firestoreServiceProvider);
+  //   final result = await firestore.fetchBillsByDate(date);
+
+  //   final createdCash = result["created"]?["cash"] ?? [];
+  //   final createdUpi = result["created"]?["upi"] ?? [];
+  //   final createdUnpaid = result["created"]?["unpaid"] ?? [];
+
+  //   final paidTodayCash = result["paidToday"]?["cash"] ?? [];
+  //   final paidTodayUpi = result["paidToday"]?["upi"] ?? [];
+
+  //   final allCreated = [...createdCash, ...createdUpi, ...createdUnpaid];
+  //   final allPaidToday = [...paidTodayCash, ...paidTodayUpi];
+
+  //   final createdCashTotal = createdCash.fold<double>(
+  //     0,
+  //     (sum, b) => sum + b.discountedTotal,
+  //   );
+  //   final createdUpiTotal = createdUpi.fold<double>(
+  //     0,
+  //     (sum, b) => sum + b.discountedTotal,
+  //   );
+  //   final createdUnpaidTotal = createdUnpaid.fold<double>(
+  //     0,
+  //     (sum, b) => sum + b.discountedTotal,
+  //   );
+
+  //   final paidTodayCashTotal = paidTodayCash.fold<double>(
+  //     0,
+  //     (sum, b) => sum + b.discountedTotal,
+  //   );
+  //   final paidTodayUpiTotal = paidTodayUpi.fold<double>(
+  //     0,
+  //     (sum, b) => sum + b.discountedTotal,
+  //   );
+
+  //   final overallCreatedTotal =
+  //       createdCashTotal + createdUpiTotal + createdUnpaidTotal;
+  //   final overallOutstandingTotal = paidTodayCashTotal + paidTodayUpiTotal;
+
+  //   final pdf = pw.Document();
+
+  //   pw.Widget buildSection(
+  //     String title,
+  //     List<Bill> bills,
+  //     bool isCreatedSection,
+  //   ) {
+  //     return pw.Column(
+  //       crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //       children: [
+  //         pw.Center(
+  //           child: pw.Text(
+  //             title,
+  //             style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+  //           ),
+  //         ),
+  //         pw.SizedBox(height: 8),
+
+  //         pw.Table.fromTextArray(
+  //           headers: ['S.No', 'Shop', 'Status', 'Amount', 'Bill No'],
+  //           data: List.generate(bills.length, (index) {
+  //             final b = bills[index];
+  //             print(
+  //               "CHECK BILL: id=${b.id} shop=${b.shopName} "
+  //               "isPaid=${b.isPaid} upi=${b.upiPayment} "
+  //               "amount=${b.discountedTotal} billNo=${b.billNumber}",
+  //             );
+
+  //             // Calculate status safely
+  //             String status;
+  //             if (b.isPaid == false) {
+  //               status = "Unpaid";
+  //             } else if (b.upiPayment == true) {
+  //               status = "UPI";
+  //             } else if (b.upiPayment == false) {
+  //               status = "Cash";
+  //             } else {
+  //               status = "Unknown"; // when upiPayment == null
+  //             }
+
+  //             return [
+  //               (index + 1).toString(),
+  //               b.shopName ?? '',
+  //               status,
+  //               (b.discountedTotal ?? 0.0).toStringAsFixed(2),
+  //               b.billNumber ?? '',
+  //             ];
+  //           }),
+  //         ),
+  //         pw.SizedBox(height: 12),
+  //       ],
+  //     );
+  //   }
+
+  //   // ✅ Add Page
+  //   pdf.addPage(
+  //     pw.MultiPage(
+  //       pageFormat: PdfPageFormat.a4,
+  //       margin: const pw.EdgeInsets.all(20),
+  //       build:
+  //           (context) => [
+  //             pw.Text(
+  //               'Bills Report - ${DateFormat('dd/MM/yyyy').format(date)}',
+  //               style: pw.TextStyle(
+  //                 fontSize: 18,
+  //                 fontWeight: pw.FontWeight.bold,
+  //               ),
+  //             ),
+  //             pw.SizedBox(height: 12),
+
+  //             buildSection("Created Bills", allCreated, true),
+
+  //             // 🟢 Section 2 — Outstanding Paid Today
+  //             buildSection("Outstanding Paid Today", allPaidToday, false),
+
+  //             pw.SizedBox(height: 20),
+  //             pw.Divider(),
+
+  //             pw.Text(
+  //               "Summary",
+  //               style: pw.TextStyle(
+  //                 fontSize: 16,
+  //                 fontWeight: pw.FontWeight.bold,
+  //               ),
+  //             ),
+  //             pw.SizedBox(height: 8),
+
+  //             // ✅ Two-column summary layout
+  //             pw.Row(
+  //               crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  //               children: [
+  //                 // 🔸 Left Column — Created Totals
+  //                 pw.Column(
+  //                   crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //                   children: [
+  //                     pw.Text(
+  //                       "Created Bills",
+  //                       style: pw.TextStyle(
+  //                         fontSize: 14,
+  //                         fontWeight: pw.FontWeight.bold,
+  //                       ),
+  //                     ),
+  //                     pw.SizedBox(height: 6),
+  //                     pw.Text("UPI : ${createdUpiTotal.toStringAsFixed(2)}"),
+  //                     pw.Text("Cash : ${createdCashTotal.toStringAsFixed(2)}"),
+  //                     pw.Text(
+  //                       "Unpaid : ${createdUnpaidTotal.toStringAsFixed(2)}",
+  //                     ),
+  //                     pw.SizedBox(height: 6),
+  //                     pw.Text(
+  //                       "Total : ${overallCreatedTotal.toStringAsFixed(2)}",
+  //                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+  //                     ),
+  //                   ],
+  //                 ),
+
+  //                 pw.Column(
+  //                   crossAxisAlignment: pw.CrossAxisAlignment.start,
+  //                   children: [
+  //                     pw.Text(
+  //                       "Outstanding Paid Today",
+  //                       style: pw.TextStyle(
+  //                         fontSize: 14,
+  //                         fontWeight: pw.FontWeight.bold,
+  //                       ),
+  //                     ),
+  //                     pw.SizedBox(height: 6),
+  //                     pw.Text("UPI : ${paidTodayUpiTotal.toStringAsFixed(2)}"),
+  //                     pw.Text(
+  //                       "Cash : ${paidTodayCashTotal.toStringAsFixed(2)}",
+  //                     ),
+  //                     pw.SizedBox(height: 6),
+  //                     pw.Text(
+  //                       "Total : ${overallOutstandingTotal.toStringAsFixed(2)}",
+  //                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+  //                     ),
+  //                   ],
+  //                 ),
+  //               ],
+  //             ),
+  //           ],
+  //     ),
+  //   );
+  //   final dir = await getApplicationDocumentsDirectory();
+  //   final path =
+  //       "${dir.path}/Bills_Report_${DateFormat('ddMMyyyy').format(date)}.pdf";
+  //   final file = File(path);
+  //   await file.writeAsBytes(await pdf.save());
+  //   await OpenFilex.open(file.path);
+  // }
+
+  // in my firestore db i have added new field upipayment in this i pass true mean the payment method upi if it false means the payment method is cash i have old bills in that i didnt have that upipayment field i want to take pdf of the bill s fo rmy refeeranvce how can i overcome this senario correctly
   @override
   Widget build(BuildContext context) {
     final firestore = ref.watch(firestoreServiceProvider);
@@ -850,28 +1238,16 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                 );
               } else if (value == 'pdf') {
                 final selectedDate = await showDatePicker(
+                  barrierDismissible: false,
                   context: context,
                   initialDate: DateTime.now(),
                   firstDate: DateTime(2020),
                   lastDate: DateTime.now(),
                 );
                 if (selectedDate != null) {
-                  await showLoadingWhile(
+                  await showLoadingWhilepdf(
                     context,
-                    _generateReportPdf(context, ref, selectedDate),
-                  );
-                }
-              } else if (value == 'excel') {
-                final selectedDate = await showDatePicker(
-                  context: context,
-                  initialDate: DateTime.now(),
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime.now(),
-                );
-                if (selectedDate != null) {
-                  await showLoadingWhile(
-                    context,
-                    _generateReportExcel(context, ref, selectedDate),
+                    () => _generateReportPdf(context, ref, selectedDate),
                   );
                 }
               } else if (value == 'logout') {
@@ -894,13 +1270,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                       title: Text('Download PDF Report'),
                     ),
                   ),
-                  const PopupMenuItem(
-                    value: 'excel',
-                    child: ListTile(
-                      leading: Icon(Icons.table_chart, color: Colors.blue),
-                      title: Text('Download Excel Report'),
-                    ),
-                  ),
+
                   const PopupMenuItem(
                     value: 'logout',
                     child: ListTile(
@@ -918,10 +1288,8 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Paid Bills Tab
           Column(
             children: [
-              // Use the enhanced filter chips with totals for paid bills
               paidBillsAsync.when(
                 data:
                     (shopsData) => _buildFilterChipsWithTotals(shopsData, true),
@@ -954,10 +1322,8 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
               Expanded(
                 child: paidBillsAsync.when(
                   data: (shopsData) {
-                    // Apply date/month filter first
                     final dateFiltered = _filterShopsData(shopsData);
 
-                    // Then apply shop name filter
                     final filtered =
                         dateFiltered
                             .where(
@@ -1036,15 +1402,11 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                         '${filtered.length}',
                                         style: const TextStyle(
                                           fontSize: 16,
-                                          color:
-                                              Colors
-                                                  .green, // value has different color
+                                          color: Colors.green,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                      const SizedBox(
-                                        width: 16,
-                                      ), // spacing between Shops and Bills
+                                      const SizedBox(width: 16),
                                       Text(
                                         'Bills:  ',
                                         style: const TextStyle(
@@ -1057,9 +1419,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                         '${filtered.fold<int>(0, (sum, shop) => sum + (shop['count'] as int))}',
                                         style: const TextStyle(
                                           fontSize: 14,
-                                          color:
-                                              Colors
-                                                  .green, // value has different color
+                                          color: Colors.green,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
@@ -1114,10 +1474,8 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
             ],
           ),
 
-          // Unpaid Bills Tab
           Column(
             children: [
-              // Use the enhanced filter chips with totals for unpaid bills
               unpaidBillsAsync.when(
                 data:
                     (shopsData) =>
@@ -1417,11 +1775,11 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
 
             return Dialog(
               insetPadding: EdgeInsets.all(8),
-              // removes default margin
-              backgroundColor: Colors.transparent, // so we can style our own
+
+              backgroundColor: Colors.transparent,
               child: Container(
-                width: MediaQuery.of(context).size.width, // full width
-                height: MediaQuery.of(context).size.height * 0.8, // 85% height
+                width: MediaQuery.of(context).size.width,
+                height: MediaQuery.of(context).size.height * 0.8,
                 decoration: BoxDecoration(
                   color: const Color(0xFFE3F2FD),
                   borderRadius: BorderRadius.circular(12),
@@ -1517,18 +1875,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                 ],
                               ),
                             ),
-                            // subtitle: Padding(
-                            //   padding: const EdgeInsets.symmetric(
-                            //     horizontal: 8,
-                            //   ),
-                            //   child: Text(
-                            //     bill.markedAsPaidAt != null
-                            //         ? DateFormat(
-                            //           'dd MMM yyyy',
-                            //         ).format(bill.markedAsPaidAt!.toDate())
-                            //         : '—',
-                            //   ),
-                            // ),
+
                             onLongPress: () async {
                               final shouldDelete = await showDialog<bool>(
                                 context: context,
@@ -1567,18 +1914,25 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
 
                               if (shouldDelete == true) {
                                 try {
-                                  final firestore = ref.read(
-                                    firestoreServiceProvider,
-                                  );
-                                  await firestore.deleteBill(bill.id);
+                                  await showLoadingWhileTask(context, () async {
+                                    final firestore = ref.read(
+                                      firestoreServiceProvider,
+                                    );
+                                    await firestore.deleteBill(
+                                      bill.id,
+                                    ); // ONLY delete here
+                                  });
+
+                                  // 🔥 After transaction is finished → now refresh providers
+                                  ref.invalidate(paidBillsProvider);
+                                  ref.invalidate(unpaidBillsProvider);
+
                                   setState(() {
                                     filteredBills.removeWhere(
                                       (b) => b.id == bill.id,
                                     );
                                   });
-                                  ScaffoldMessenger.of(
-                                    context,
-                                  ).clearSnackBars();
+
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
@@ -1586,10 +1940,6 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                       ),
                                     ),
                                   );
-
-                                  // Refresh providers
-                                  ref.invalidate(paidBillsProvider);
-                                  ref.invalidate(unpaidBillsProvider);
                                 } catch (e) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
@@ -1617,19 +1967,6 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                       color: Colors.grey,
                                     ),
                                   ),
-
-                                  // ✅ Marked As Paid At
-                                  // Text(
-                                  //   bill.markedAsPaidAt != null
-                                  //       ? DateFormat(
-                                  //         'dd MMM yyyy',
-                                  //       ).format(bill.markedAsPaidAt!.toDate())
-                                  //       : '—',
-                                  //   style: const TextStyle(
-                                  //     fontSize: 12,
-                                  //     color: Colors.grey,
-                                  //   ),
-                                  // ),
                                 ],
                               ),
                             ),
@@ -1690,6 +2027,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
     final role = ref.watch(roleProvider);
     List<Bill> filteredBills = List.from(unpaidBills);
     final TextEditingController searchController = TextEditingController();
+
     showDialog(
       barrierDismissible: false,
       context: context,
@@ -1698,6 +2036,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
         final selectedBills = <String, Bill>{};
         final TextEditingController _paidAmountController =
             TextEditingController();
+        bool? upiPayment; // ✅ null by default
 
         return StatefulBuilder(
           builder: (context, setState) {
@@ -1724,23 +2063,24 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
             );
 
             return Dialog(
-              insetPadding: EdgeInsets.all(8),
+              insetPadding: const EdgeInsets.all(8),
               backgroundColor: Colors.transparent,
               child: Container(
-                width: MediaQuery.of(context).size.width, // full width
-                height: MediaQuery.of(context).size.height * 0.8, // 85% height
+                width: MediaQuery.of(context).size.width,
+                height: MediaQuery.of(context).size.height * 0.8,
                 decoration: BoxDecoration(
                   color: const Color(0xFFE3F2FD),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
                   children: [
+                    // ─── Header ──────────────────────────────
                     Container(
-                      padding: EdgeInsets.symmetric(
+                      padding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 12,
                       ),
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         border: Border(
                           bottom: BorderSide(color: Colors.grey, width: 0.5),
                         ),
@@ -1748,8 +2088,8 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            "UnPaid Bills",
+                          const Text(
+                            "Unpaid Bills",
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -1762,7 +2102,8 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
+
+                    // ─── Search ───────────────────────────────
                     Padding(
                       padding: const EdgeInsets.all(10.0),
                       child: TextField(
@@ -1778,7 +2119,8 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+
+                    // ─── Bills List ───────────────────────────
                     Expanded(
                       child: ListView.builder(
                         itemCount: filteredBills.length,
@@ -1825,22 +2167,25 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
 
                               if (shouldDelete == true) {
                                 try {
-                                  final firestore = ref.read(
-                                    firestoreServiceProvider,
-                                  );
-                                  await firestore.deleteBill(bill.id);
-                                  setState(() {
-                                    unpaidBills.removeWhere(
-                                      (b) => b.id == bill.id,
+                                  await showLoadingWhileTask(context, () async {
+                                    final firestore = ref.read(
+                                      firestoreServiceProvider,
                                     );
+                                    await firestore.deleteBill(
+                                      bill.id,
+                                    ); // ONLY delete here
+                                  });
+
+                                  // 🔥 After transaction is finished → now refresh providers
+                                  ref.invalidate(paidBillsProvider);
+                                  ref.invalidate(unpaidBillsProvider);
+
+                                  setState(() {
                                     filteredBills.removeWhere(
                                       (b) => b.id == bill.id,
                                     );
                                   });
 
-                                  ScaffoldMessenger.of(
-                                    context,
-                                  ).clearSnackBars();
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
@@ -1848,10 +2193,6 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                       ),
                                     ),
                                   );
-
-                                  // Refresh providers
-                                  ref.invalidate(unpaidBillsProvider);
-                                  ref.invalidate(paidBillsProvider);
                                 } catch (e) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
@@ -1899,9 +2240,6 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                               );
                                               ScaffoldMessenger.of(
                                                 context,
-                                              ).clearSnackBars();
-                                              ScaffoldMessenger.of(
-                                                context,
                                               ).showSnackBar(
                                                 SnackBar(
                                                   content: Text(
@@ -1942,7 +2280,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                   onPressed: () async {
                                     await generateAndOpenPdf(bill, false);
                                   },
-                                  icon: Icon(
+                                  icon: const Icon(
                                     Icons.download,
                                     size: 20,
                                     color: Colors.grey,
@@ -1954,7 +2292,10 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                         },
                       ),
                     ),
+
                     const Divider(),
+
+                    // ─── Total ────────────────────────────────
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
@@ -1965,6 +2306,8 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                         ),
                       ),
                     ),
+
+                    // ─── Paid Amount ──────────────────────────
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Form(
@@ -1972,41 +2315,12 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                         child: TextFormField(
                           autovalidateMode: AutovalidateMode.onUserInteraction,
                           controller: _paidAmountController,
-                          cursorErrorColor: const Color.fromARGB(
-                            255,
-                            2,
-                            113,
-                            192,
-                          ),
-                          cursorColor: const Color.fromARGB(255, 2, 113, 192),
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
                           decoration: InputDecoration(
                             prefixText: "\$ ",
-                            labelStyle: const TextStyle(
-                              color: Color.fromARGB(255, 2, 113, 192),
-                            ),
                             labelText: 'Enter Paid Amount',
-
-                            errorBorder: const OutlineInputBorder(
-                              borderRadius: BorderRadius.all(
-                                Radius.circular(20),
-                              ),
-                              borderSide: BorderSide(
-                                color: Colors.red,
-                                width: 2,
-                              ),
-                            ),
-                            focusedErrorBorder: const OutlineInputBorder(
-                              borderRadius: BorderRadius.all(
-                                Radius.circular(20),
-                              ),
-                              borderSide: BorderSide(
-                                color: Colors.red,
-                                width: 2,
-                              ),
-                            ),
                             border: const OutlineInputBorder(
                               borderRadius: BorderRadius.all(
                                 Radius.circular(20),
@@ -2035,75 +2349,156 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                         ),
                       ),
                     ),
-                    SizedBox(height: 8),
+
+                    const SizedBox(height: 8),
+
+                    // ─── Admin Controls ───────────────────────
                     if (role == UserRole.admin)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: ElevatedButton(
-                          style: const ButtonStyle(
-                            elevation: WidgetStatePropertyAll(4),
-                            backgroundColor: WidgetStatePropertyAll(
-                              Colors.white,
-                            ),
-                          ),
-                          onPressed: () async {
-                            // Validate the form first
-                            if (!_formKey.currentState!.validate()) {
-                              return; // Stop if validation fails
-                            }
-
-                            if (selectedBills.isEmpty) {
-                              ScaffoldMessenger.of(context).clearSnackBars();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    "Please select at least one bill",
+                        padding: const EdgeInsets.only(
+                          bottom: 8,
+                          left: 16,
+                          right: 16,
+                        ),
+                        child: Row(
+                          children: [
+                            // Payment Method Selection
+                            Expanded(
+                              flex: 3,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Payment Method:',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                  duration: Duration(seconds: 2),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: RadioListTile<bool>(
+                                          title: const Text('Cash'),
+                                          value: false,
+                                          groupValue: upiPayment,
+                                          dense: true,
+                                          contentPadding: EdgeInsets.zero,
+                                          activeColor: const Color.fromARGB(
+                                            255,
+                                            2,
+                                            113,
+                                            192,
+                                          ),
+                                          onChanged:
+                                              (value) => setState(
+                                                () => upiPayment = value,
+                                              ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: RadioListTile<bool>(
+                                          title: const Text('UPI'),
+                                          value: true,
+                                          groupValue: upiPayment,
+                                          dense: true,
+                                          contentPadding: EdgeInsets.zero,
+                                          activeColor: const Color.fromARGB(
+                                            255,
+                                            2,
+                                            113,
+                                            192,
+                                          ),
+                                          onChanged:
+                                              (value) => setState(
+                                                () => upiPayment = value,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // Paid Button
+                            Expanded(
+                              flex: 2,
+                              child: ElevatedButton(
+                                style: const ButtonStyle(
+                                  elevation: WidgetStatePropertyAll(4),
+                                  backgroundColor: WidgetStatePropertyAll(
+                                    Colors.white,
+                                  ),
                                 ),
-                              );
-                              return;
-                            }
+                                onPressed: () async {
+                                  if (!_formKey.currentState!.validate())
+                                    return;
 
-                            final firestore = ref.read(
-                              firestoreServiceProvider,
-                            );
-                            final selectedIds = selectedBills.keys.toList();
+                                  if (selectedBills.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          "Please select at least one bill",
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
 
-                            final paidAmount =
-                                double.tryParse(
-                                  _paidAmountController.text.trim(),
-                                ) ??
-                                0.0;
+                                  if (upiPayment == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          "Please select a payment method",
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
 
-                            await showLoadingWhileTask(context, () async {
-                              final bills = await firestore.fetchBillsByIds(
-                                selectedIds,
-                              );
-                              await firestore.markBillsAsPaid(
-                                bills,
-                                paidAmount,
-                              );
-                            });
+                                  final firestore = ref.read(
+                                    firestoreServiceProvider,
+                                  );
+                                  final selectedIds =
+                                      selectedBills.keys.toList();
+                                  final paidAmount =
+                                      double.tryParse(
+                                        _paidAmountController.text.trim(),
+                                      ) ??
+                                      0.0;
 
-                            ref.invalidate(unpaidBillsProvider);
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).clearSnackBars();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  '${selectedIds.length} bill(s) marked as paid.',
+                                  await showLoadingWhileTask(context, () async {
+                                    final bills = await firestore
+                                        .fetchBillsByIds(selectedIds);
+                                    await firestore.markBillsAsPaid(
+                                      bills,
+                                      paidAmount,
+                                      upiPayment!,
+                                    );
+                                  });
+
+                                  ref.invalidate(unpaidBillsProvider);
+                                  Navigator.pop(context);
+
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        '${selectedIds.length} bill(s) marked as paid.',
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: const Text(
+                                  'Paid',
+                                  style: TextStyle(
+                                    color: Color(0xFF00A105),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
-                            );
-                          },
-                          child: const Text(
-                            'Paid',
-                            style: TextStyle(
-                              color: Color(0xFF00A105),
-                              fontSize: 12,
                             ),
-                          ),
+                          ],
                         ),
                       ),
                   ],

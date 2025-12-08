@@ -15,7 +15,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (kIsWeb) {
-    // Web-specific Firebase options
+    // Web Firebase initialization
     await Firebase.initializeApp(options: windowsFirebaseOptions);
   } else {
     // Mobile/Desktop Firebase initialization
@@ -32,13 +32,19 @@ class BillingApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final role = ref.watch(roleProvider);
 
-    print("👀 BillingApp rebuilt with role=$role");
+    // While SharedPreferences is still loading (role == null)
+    if (role == null) {
+      return MaterialApp(
+        theme: ThemeData(colorSchemeSeed: Colors.blue),
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
+    }
 
     return MaterialApp(
-      key: ValueKey(role), // 🔑 forces rebuild when role changes
+      key: ValueKey(role),
       title: 'Billing System',
       theme: ThemeData(
-        primarySwatch: Colors.teal,
+        colorSchemeSeed: Colors.blue,
         scaffoldBackgroundColor: const Color(0xFFE3F2FD),
       ),
       debugShowCheckedModeBanner: false,
@@ -126,12 +132,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 ? Row(
                   children: [
                     NavigationRail(
-                      indicatorColor: Color.fromARGB(255, 2, 113, 192),
-                      selectedIconTheme: IconThemeData(color: Colors.white),
-                      unselectedLabelTextStyle: TextStyle(
+                      indicatorColor: const Color.fromARGB(255, 2, 113, 192),
+                      selectedIconTheme: const IconThemeData(
+                        color: Colors.white,
+                      ),
+                      unselectedLabelTextStyle: const TextStyle(
                         color: Colors.blueGrey,
                       ),
-                      unselectedIconTheme: IconThemeData(
+                      unselectedIconTheme: const IconThemeData(
                         color: Colors.blueGrey,
                       ),
                       backgroundColor: Colors.white,
@@ -212,10 +220,3 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 }
-
-
-  // pageFormat: PdfPageFormat(
-  //       72 * PdfPageFormat.mm, // match printer's printable width
-  //       double.infinity,
-  //       marginAll: 2 * PdfPageFormat.mm, // minimal margins
-  //     ),

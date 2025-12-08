@@ -1,4 +1,3 @@
-import 'package:billing/features/screens/billing_screen.dart';
 import 'package:billing/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,14 +11,19 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  bool _obscurePassword = true; // 🔑 state for password visibility
+  bool _obscurePassword = true;
 
   @override
   Widget build(BuildContext context) {
     final roleNotifier = ref.read(roleProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Login")),
+      backgroundColor: const Color(0xFFE3F2FD),
+      appBar: AppBar(
+        backgroundColor: const Color.fromARGB(255, 2, 113, 192),
+        title: const Text("Login", style: TextStyle(color: Colors.white)),
+        centerTitle: true,
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

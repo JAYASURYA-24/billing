@@ -42,9 +42,8 @@ class RoleNotifier extends StateNotifier<UserRole> {
   }
 
   Future<void> logout() async {
-    print("🔴 Logging out...");
     state = UserRole.none;
-    print("🔴 State after logout: $state");
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('userRole');
   }

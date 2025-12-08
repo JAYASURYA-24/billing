@@ -1,5 +1,6 @@
 import 'package:billing/features/models/product.dart';
 import 'package:billing/features/models/shop.dart';
+import 'package:billing/features/services/firestore_services.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,75 +18,335 @@ class AdminScreen extends ConsumerStatefulWidget {
 class _AdminScreenState extends ConsumerState<AdminScreen> {
   String _searchQuery = '';
 
+  // void _showProductDialog(
+  //   BuildContext context,
+  //   WidgetRef ref, {
+  //   Product? product,
+  // }) {
+  //   final _nameController = TextEditingController(text: product?.name ?? '');
+
+  //   final isEdit = product != null;
+
+  //   showDialog(
+  //     barrierDismissible: false,
+  //     context: context,
+  //     builder:
+  //         (_) => AlertDialog(
+  //           backgroundColor: const Color(0xFFE3F2FD),
+  //           title: Text(isEdit ? 'Edit Product' : 'Add Product'),
+  //           content: Column(
+  //             mainAxisSize: MainAxisSize.min,
+  //             children: [
+  //               TextFormField(
+  //                 controller: _nameController,
+  //                 cursorColor: const Color.fromARGB(255, 2, 113, 192),
+  //                 decoration: const InputDecoration(
+  //                   labelText: 'Product Name',
+  //                   labelStyle: TextStyle(color: Colors.black),
+  //                   focusedBorder: UnderlineInputBorder(
+  //                     borderSide: BorderSide(
+  //                       color: Color.fromARGB(255, 2, 113, 192),
+  //                     ),
+  //                   ),
+  //                 ),
+  //               ),
+  //             ],
+  //           ),
+  //           actions: [
+  //             TextButton(
+  //               onPressed: () => Navigator.pop(context),
+  //               child: const Text(
+  //                 'Cancel',
+  //                 style: TextStyle(color: Colors.red),
+  //               ),
+  //             ),
+  //             ElevatedButton(
+  //               style: ButtonStyle(
+  //                 backgroundColor: WidgetStatePropertyAll(Colors.white),
+  //               ),
+  //               child: Text(
+  //                 isEdit ? 'Update' : 'Add',
+  //                 style: const TextStyle(color: Color.fromARGB(255, 0, 161, 5)),
+  //               ),
+  //               onPressed: () {
+  //                 final name = _nameController.text.trim();
+
+  //                 if (name.isEmpty) return;
+
+  //                 final newProduct = Product(id: product?.id ?? '', name: name);
+
+  //                 if (isEdit) {
+  //                   ref
+  //                       .read(productProvider.notifier)
+  //                       .updateProduct(newProduct);
+  //                 } else {
+  //                   ref.read(productProvider.notifier).addProduct(newProduct);
+  //                 }
+
+  //                 Navigator.pop(context);
+  //               },
+  //             ),
+  //           ],
+  //         ),
+  //   );
+  // }
+
+  // void _showProductDialog(
+  //   BuildContext context,
+  //   WidgetRef ref, {
+  //   Product? product,
+  // }) {
+  //   final _nameController = TextEditingController(text: product?.name ?? '');
+
+  //   final _quantityController = TextEditingController();
+
+  //   final isEdit = product != null;
+
+  //   showDialog(
+  //     barrierDismissible: false,
+  //     context: context,
+  //     builder:
+  //         (_) => AlertDialog(
+  //           backgroundColor: const Color(0xFFE3F2FD),
+  //           title: Text(isEdit ? 'Edit Product' : 'Add Product'),
+  //           content: SingleChildScrollView(
+  //             child: Column(
+  //               mainAxisSize: MainAxisSize.min,
+  //               children: [
+  //                 TextFormField(
+  //                   controller: _nameController,
+  //                   cursorColor: const Color.fromARGB(255, 2, 113, 192),
+  //                   decoration: const InputDecoration(
+  //                     labelText: 'Product Name',
+  //                     labelStyle: TextStyle(color: Colors.black),
+  //                     focusedBorder: UnderlineInputBorder(
+  //                       borderSide: BorderSide(
+  //                         color: Color.fromARGB(255, 2, 113, 192),
+  //                       ),
+  //                     ),
+  //                   ),
+  //                 ),
+  //                 const SizedBox(height: 10),
+
+  //                 const SizedBox(height: 10),
+  //                 TextFormField(
+  //                   controller: _quantityController,
+  //                   keyboardType: TextInputType.number,
+  //                   cursorColor: const Color.fromARGB(255, 2, 113, 192),
+  //                   decoration: const InputDecoration(
+  //                     labelText: 'Quantity',
+  //                     labelStyle: TextStyle(color: Colors.black),
+  //                     focusedBorder: UnderlineInputBorder(
+  //                       borderSide: BorderSide(
+  //                         color: Color.fromARGB(255, 2, 113, 192),
+  //                       ),
+  //                     ),
+  //                   ),
+  //                 ),
+  //               ],
+  //             ),
+  //           ),
+  //           actions: [
+  //             TextButton(
+  //               onPressed: () => Navigator.pop(context),
+  //               child: const Text(
+  //                 'Cancel',
+  //                 style: TextStyle(color: Colors.red),
+  //               ),
+  //             ),
+  //             ElevatedButton(
+  //               style: const ButtonStyle(
+  //                 backgroundColor: WidgetStatePropertyAll(Colors.white),
+  //               ),
+  //               child: Text(
+  //                 isEdit ? 'Update' : 'Add',
+  //                 style: const TextStyle(color: Color.fromARGB(255, 0, 161, 5)),
+  //               ),
+  //               onPressed: () async {
+  //                 final name = _nameController.text.trim();
+
+  //                 final quantity =
+  //                     int.tryParse(_quantityController.text.trim()) ?? 0;
+
+  //                 if (name.isEmpty) return;
+
+  //                 final firestoreService = ref.read(firestoreServiceProvider);
+
+  //                 if (isEdit) {
+  //                   // ✅ Instead of replacing, add to existing quantity
+  //                   await firestoreService.increaseProductQuantity(
+  //                     product!.id,
+  //                     quantity,
+  //                   );
+  //                 } else {
+  //                   // Add a new product (first time)
+  //                   final newProduct = Product(
+  //                     id: product?.id ?? '',
+  //                     name: name,
+
+  //                     quantity: quantity,
+  //                   );
+  //                   ref.read(productProvider.notifier).addProduct(newProduct);
+  //                 }
+
+  //                 Navigator.pop(context);
+  //               },
+  //             ),
+  //           ],
+  //         ),
+  //   );
+  // }
+
   void _showProductDialog(
     BuildContext context,
     WidgetRef ref, {
     Product? product,
   }) {
     final _nameController = TextEditingController(text: product?.name ?? '');
+    final _quantityController = TextEditingController();
 
     final isEdit = product != null;
+    String actionType = 'add'; // default mode → add quantity
 
     showDialog(
       barrierDismissible: false,
       context: context,
       builder:
-          (_) => AlertDialog(
-            backgroundColor: const Color(0xFFE3F2FD),
-            title: Text(isEdit ? 'Edit Product' : 'Add Product'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _nameController,
-                  cursorColor: const Color.fromARGB(255, 2, 113, 192),
-                  decoration: const InputDecoration(
-                    labelText: 'Product Name',
-                    labelStyle: TextStyle(color: Colors.black),
-                    focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Color.fromARGB(255, 2, 113, 192),
-                      ),
+          (_) => StatefulBuilder(
+            builder:
+                (context, setState) => AlertDialog(
+                  backgroundColor: const Color(0xFFE3F2FD),
+                  title: Text(isEdit ? 'Edit Product' : 'Add Product'),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          controller: _nameController,
+                          cursorColor: const Color.fromARGB(255, 2, 113, 192),
+                          decoration: const InputDecoration(
+                            labelText: 'Product Name',
+                            labelStyle: TextStyle(color: Colors.black),
+                            focusedBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(
+                                color: Color.fromARGB(255, 2, 113, 192),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 15),
+
+                        // ✅ Add/Subtract Selector
+                        if (isEdit) ...[
+                          const Text(
+                            "Select Action",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 5),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ChoiceChip(
+                                label: const Text('+ qty'),
+                                selected: actionType == 'add',
+                                selectedColor: Colors.green[100],
+                                onSelected:
+                                    (_) => setState(() => actionType = 'add'),
+                              ),
+                              const SizedBox(width: 10),
+                              ChoiceChip(
+                                label: const Text('- qty'),
+                                selected: actionType == 'reduce',
+                                selectedColor: Colors.red[100],
+                                onSelected:
+                                    (_) =>
+                                        setState(() => actionType = 'reduce'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 15),
+                          TextFormField(
+                            controller: _quantityController,
+                            keyboardType: TextInputType.number,
+                            cursorColor: const Color.fromARGB(255, 2, 113, 192),
+                            decoration: const InputDecoration(
+                              labelText: 'Enter Quantity',
+                              labelStyle: TextStyle(color: Colors.black),
+                              focusedBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: Color.fromARGB(255, 2, 113, 192),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-              ElevatedButton(
-                style: ButtonStyle(
-                  backgroundColor: WidgetStatePropertyAll(Colors.white),
-                ),
-                child: Text(
-                  isEdit ? 'Update' : 'Add',
-                  style: const TextStyle(color: Color.fromARGB(255, 0, 161, 5)),
-                ),
-                onPressed: () {
-                  final name = _nameController.text.trim();
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                    ElevatedButton(
+                      style: const ButtonStyle(
+                        backgroundColor: WidgetStatePropertyAll(Colors.white),
+                      ),
+                      child: Text(
+                        isEdit ? 'Update' : 'Add',
+                        style: const TextStyle(
+                          color: Color.fromARGB(255, 0, 161, 5),
+                        ),
+                      ),
+                      onPressed: () async {
+                        final name = _nameController.text.trim();
+                        final quantity =
+                            int.tryParse(_quantityController.text.trim()) ?? 0;
+                        if (name.isEmpty) return;
 
-                  if (name.isEmpty) return;
+                        final firestoreService = ref.read(
+                          firestoreServiceProvider,
+                        );
 
-                  final newProduct = Product(id: product?.id ?? '', name: name);
+                        if (isEdit) {
+                          final changeBy =
+                              actionType == 'reduce' ? -quantity : quantity;
+                          if (changeBy == 0 ||
+                              changeBy > product.quantity &&
+                                  actionType == 'reduce') {
+                            ScaffoldMessenger.of(context).clearSnackBars();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Please enter correct quantity"),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                            return;
+                          }
 
-                  if (isEdit) {
-                    ref
-                        .read(productProvider.notifier)
-                        .updateProduct(newProduct);
-                  } else {
-                    ref.read(productProvider.notifier).addProduct(newProduct);
-                  }
+                          await firestoreService.updateProductQuantity(
+                            product!.id,
+                            changeBy,
+                          );
+                        } else {
+                          // 🆕 Add new product
+                          final newProduct = Product(
+                            id: product?.id ?? '',
+                            name: name,
+                          );
+                          ref
+                              .read(productProvider.notifier)
+                              .addProduct(newProduct);
+                        }
 
-                  Navigator.pop(context);
-                },
-              ),
-            ],
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ],
+                ),
           ),
     );
   }
@@ -359,6 +620,9 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                                     ),
                                     child: ListTile(
                                       title: Text(product.name),
+                                      subtitle: Text(
+                                        "Avail qty: ${product.quantity.toString()}",
+                                      ),
 
                                       trailing: Row(
                                         mainAxisSize: MainAxisSize.min,
