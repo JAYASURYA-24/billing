@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "344008477382",
+    "project_id": "rj-billing",
+    "storage_bucket": "rj-billing.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:344008477382:android:a997a3faa1b5237927e5c7",
+        "android_client_info": {
+          "package_name": "com.rj.billing"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA-D8AK5QK1_rui_a_j3DsfRdLdhabIPnc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
