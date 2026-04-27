@@ -7,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
 
 import '../models/bill.dart';
 
@@ -414,4 +415,353 @@ pw.Widget dottedLine(double width) {
       },
     ),
   );
+}
+
+Future<void> generateShopBalancePdf(
+  List<Map<String, dynamic>> shopsData,
+) async {
+  final pdf = pw.Document();
+
+  final fontRegular = pw.Font.ttf(
+    await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'),
+  );
+  final fontBold = pw.Font.ttf(
+    await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'),
+  );
+
+  for (var shopData in shopsData) {
+    final String shopName = shopData['shopName'] as String;
+    final List<Bill> bills = shopData['bills'] as List<Bill>;
+    final double totalUnPaid = (shopData['totalUnPaid'] as num).toDouble();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context context) {
+          return [
+            pw.Header(
+              level: 0,
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    shopName,
+                    style: pw.TextStyle(font: fontBold, fontSize: 18),
+                  ),
+                  pw.Text(
+                    DateFormat('dd/MM/yyyy').format(DateTime.now()),
+                    style: pw.TextStyle(font: fontRegular, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Table.fromTextArray(
+              headers: ['Bill No', 'Date', 'Total Amount', 'Balance'],
+              data:
+                  bills.map((bill) {
+                    return [
+                      bill.billNumber,
+                      DateFormat('dd/MM/yyyy').format(bill.createdAt.toDate()),
+                      '\$ ${bill.discountedTotal.toStringAsFixed(2)}',
+                      '\$ ${bill.balance.toStringAsFixed(2)}',
+                    ];
+                  }).toList(),
+              headerStyle: pw.TextStyle(font: fontBold, fontSize: 10),
+              cellStyle: pw.TextStyle(font: fontRegular, fontSize: 10),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey300,
+              ),
+              cellAlignment: pw.Alignment.centerLeft,
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2),
+                1: const pw.FlexColumnWidth(2),
+                2: const pw.FlexColumnWidth(1.5),
+                3: const pw.FlexColumnWidth(1.5),
+              },
+            ),
+            pw.SizedBox(height: 10),
+            pw.Divider(),
+            pw.Container(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Text(
+                'Overall Total: \$ ${totalUnPaid.toStringAsFixed(2)}',
+                style: pw.TextStyle(
+                  font: fontBold,
+                  fontSize: 14,
+                  color: PdfColors.red,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 20),
+          ];
+        },
+      ),
+    );
+  }
+
+  final bytes = await pdf.save();
+  final dir = await getApplicationDocumentsDirectory();
+  final file = File(
+    '${dir.path}/Shop_Balance_Report_${DateFormat('ddMMyyyy').format(DateTime.now())}.pdf',
+  );
+  await file.writeAsBytes(bytes);
+  await OpenFilex.open(file.path);
+}
+
+Future<void> generateSingleShopPendingBillsPdf(
+  String shopName,
+  List<Bill> bills,
+  double totalUnPaid,
+) async {
+  final pdf = pw.Document();
+
+  final font = pw.Font.helvetica();
+  final boldFont = pw.Font.helveticaBold();
+
+  // Sort bills by date to match the list style
+  bills.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+  final double totalNetTotal = bills.fold(
+    0,
+    (sum, b) => sum + b.discountedTotal,
+  );
+
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(32),
+      build: (pw.Context context) {
+        return [
+          // ---------------- Header (Centered) ----------------
+          pw.Center(
+            child: pw.Text(
+              'SASTHA INTERNATIONAL',
+              style: pw.TextStyle(font: boldFont, fontSize: 18),
+            ),
+          ),
+          pw.Center(
+            child: pw.Text(
+              'TRADINGS(SG) PTE. LTD.',
+              style: pw.TextStyle(font: boldFont, fontSize: 18),
+            ),
+          ),
+          pw.Center(
+            child: pw.Text(
+              '634 VEERASAMY ROAD',
+              style: pw.TextStyle(font: font, fontSize: 12),
+            ),
+          ),
+          pw.Center(
+            child: pw.Text(
+              '#01-140 SINGAPORE(200634)',
+              style: pw.TextStyle(font: font, fontSize: 12),
+            ),
+          ),
+          pw.Center(
+            child: pw.Text(
+              'sasthasga@gmail.com',
+              style: pw.TextStyle(font: font, fontSize: 12),
+            ),
+          ),
+          pw.Center(
+            child: pw.Text(
+              'Ph: +6580134772',
+              style: pw.TextStyle(font: font, fontSize: 12),
+            ),
+          ),
+          pw.SizedBox(height: 15),
+          pw.Center(
+            child: pw.Text(
+              'Customer Outstanding',
+              style: pw.TextStyle(font: boldFont, fontSize: 15),
+            ),
+          ),
+          pw.SizedBox(height: 25),
+
+          // ---------------- Info (Left Aligned) ----------------
+          pw.Text(
+            'TO DATE: ${DateFormat('dd-MM-yyyy').format(DateTime.now())}',
+            style: pw.TextStyle(font: font, fontSize: 11),
+          ),
+          pw.Text(
+            'CUST : $shopName',
+            style: pw.TextStyle(font: font, fontSize: 11),
+          ),
+          pw.SizedBox(height: 15),
+
+          // ---------------- Table Header ----------------
+          pw.Container(
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(
+                top: pw.BorderSide(width: 1),
+                bottom: pw.BorderSide(width: 1),
+              ),
+            ),
+            padding: const pw.EdgeInsets.symmetric(vertical: 6),
+            child: pw.Row(
+              children: [
+                pw.SizedBox(
+                  width: 30,
+                  child: pw.Text(
+                    'SNo',
+                    style: pw.TextStyle(font: boldFont, fontSize: 11),
+                  ),
+                ),
+                pw.Expanded(
+                  flex: 3,
+                  child: pw.Text(
+                    'Invoice No',
+                    style: pw.TextStyle(font: boldFont, fontSize: 11),
+                  ),
+                ),
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Text(
+                    'Invoice Date',
+                    style: pw.TextStyle(font: boldFont, fontSize: 11),
+                  ),
+                ),
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Text(
+                    'Net Total',
+                    style: pw.TextStyle(font: boldFont, fontSize: 11),
+                    textAlign: pw.TextAlign.right,
+                  ),
+                ),
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Text(
+                    'Balance',
+                    style: pw.TextStyle(font: boldFont, fontSize: 11),
+                    textAlign: pw.TextAlign.right,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ---------------- Table Data ----------------
+          ...bills.asMap().entries.map((entry) {
+            final int index = entry.key + 1;
+            final Bill bill = entry.value;
+            return pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(vertical: 4),
+              child: pw.Row(
+                children: [
+                  pw.SizedBox(
+                    width: 30,
+                    child: pw.Text(
+                      '$index',
+                      style: pw.TextStyle(font: font, fontSize: 11),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 3,
+                    child: pw.Text(
+                      bill.billNumber,
+                      style: pw.TextStyle(font: font, fontSize: 11),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 2,
+                    child: pw.Text(
+                      DateFormat('dd-MM-yyyy').format(bill.createdAt.toDate()),
+                      style: pw.TextStyle(font: font, fontSize: 11),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 2,
+                    child: pw.Text(
+                      bill.discountedTotal.toStringAsFixed(2),
+                      style: pw.TextStyle(font: font, fontSize: 11),
+                      textAlign: pw.TextAlign.right,
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 2,
+                    child: pw.Text(
+                      bill.balance.toStringAsFixed(2),
+                      style: pw.TextStyle(font: font, fontSize: 11),
+                      textAlign: pw.TextAlign.right,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+
+          // ---------------- Total Row ----------------
+          pw.Container(
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(
+                top: pw.BorderSide(width: 1),
+                bottom: pw.BorderSide(width: 1),
+              ),
+            ),
+            padding: const pw.EdgeInsets.symmetric(vertical: 6),
+            child: pw.Row(
+              children: [
+                pw.SizedBox(width: 30),
+                pw.Expanded(
+                  flex: 3,
+                  child: pw.Text(
+                    'Total :',
+                    style: pw.TextStyle(font: boldFont, fontSize: 12),
+                  ),
+                ),
+                pw.Expanded(flex: 2, child: pw.SizedBox()),
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Text(
+                    totalNetTotal.toStringAsFixed(2),
+                    style: pw.TextStyle(font: boldFont, fontSize: 12),
+                    textAlign: pw.TextAlign.right,
+                  ),
+                ),
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Text(
+                    totalUnPaid.toStringAsFixed(2),
+                    style: pw.TextStyle(font: boldFont, fontSize: 12),
+                    textAlign: pw.TextAlign.right,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 40),
+
+          // ---------------- Footer ----------------
+          pw.Text(
+            'Ac Name : Sastha International Tradings PTE. LTD',
+            style: pw.TextStyle(font: font, fontSize: 12),
+          ),
+          pw.Text(
+            'AC Number : 0721264374',
+            style: pw.TextStyle(font: font, fontSize: 12),
+          ),
+          pw.Text(
+            'Bank Name : DBS',
+            style: pw.TextStyle(font: font, fontSize: 12),
+          ),
+          pw.Text(
+            'Paynow Number : 202442413M',
+            style: pw.TextStyle(font: font, fontSize: 12),
+          ),
+        ];
+      },
+    ),
+  );
+
+  final bytes = await pdf.save();
+  final dir = await getApplicationDocumentsDirectory();
+  final file = File(
+    '${dir.path}/${shopName.replaceAll(' ', '_')}_Pending_Bills_${DateFormat('ddMMyyyy').format(DateTime.now())}.pdf',
+  );
+  await file.writeAsBytes(bytes);
+  await OpenFilex.open(file.path);
 }

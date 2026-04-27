@@ -700,6 +700,9 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                 );
 
                                 _resetSignature();
+                                paidAmountController.clear();
+                                discountPercentController.clear();
+
                                 Navigator.pop(context);
                               }());
                             },

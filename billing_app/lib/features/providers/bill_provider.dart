@@ -48,6 +48,7 @@ class BillingNotifier extends StateNotifier<Bill> {
           previousUnpaid: 0.0,
           paidAmount: 0.0,
           balance: 0.0,
+          paidToday: 0.0,
         ),
       );
 
@@ -149,14 +150,14 @@ class BillingNotifier extends StateNotifier<Bill> {
     final currentBillBalance = finalDiscountedTotal - paidAmount;
 
     final totalBalance = currentBillBalance;
-
+    final bool isHalfPaid = !isPaid && paidAmount > 0 && currentBillBalance > 0;
     if (isPreview) {
       final previewBill = Bill(
         id: const Uuid().v4(),
         shopName: shopName,
         items: state.items,
         isPaid: isPaid,
-        upiPayment: isPaid ? upiPayment : null,
+        upiPayment: (isPaid || isHalfPaid) ? upiPayment : null,
         createdAt: createdAt,
         markedAsPaidAt: isPaid ? Timestamp.now() : null,
         billNumber: "PREVIEW",
@@ -167,6 +168,7 @@ class BillingNotifier extends StateNotifier<Bill> {
         discountAmount: finalDiscountAmount,
         discountedTotal: finalDiscountedTotal,
         signatureUrl: signatureUrl,
+        paidToday: paidAmount,
       );
 
       return (previewBill, unpaidBills);
@@ -199,7 +201,7 @@ class BillingNotifier extends StateNotifier<Bill> {
         shopName: shopName,
         items: state.items,
         isPaid: isPaid,
-        upiPayment: isPaid ? upiPayment : null,
+        upiPayment: (isPaid || isHalfPaid) ? upiPayment : null,
         createdAt: createdAt,
         markedAsPaidAt: isPaid ? Timestamp.now() : null,
         billNumber: billNumber,
@@ -210,6 +212,7 @@ class BillingNotifier extends StateNotifier<Bill> {
         discountAmount: finalDiscountAmount,
         discountedTotal: finalDiscountedTotal,
         signatureUrl: signatureUrl,
+        paidToday: paidAmount,
       );
 
       final billRef = FirebaseFirestore.instance
@@ -230,13 +233,14 @@ class BillingNotifier extends StateNotifier<Bill> {
       shopName: '',
       items: [],
       isPaid: true,
-      upiPayment: isPaid ? upiPayment : null,
+      upiPayment: (isPaid || isHalfPaid) ? upiPayment : null,
       createdAt: Timestamp.now(),
       billNumber: '',
       currentPurchaseTotal: 0.0,
       previousUnpaid: 0.0,
       paidAmount: 0.0,
       balance: 0.0,
+      paidToday: 0.0,
     );
 
     return (newBill, unpaidBills);

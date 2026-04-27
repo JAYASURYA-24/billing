@@ -55,11 +55,13 @@ class Bill {
   final bool isPaid;
   final Timestamp createdAt;
   final Timestamp? markedAsPaidAt;
+  final Timestamp? paidTodayAt;
 
   final double currentPurchaseTotal;
   final double previousUnpaid;
   final double paidAmount;
   final double balance;
+  final double paidToday;
 
   final double discountAmount;
   final double discountedTotal;
@@ -75,6 +77,8 @@ class Bill {
     required this.createdAt,
     required this.upiPayment,
     this.markedAsPaidAt,
+    required this.paidToday,
+    this.paidTodayAt,
 
     required this.currentPurchaseTotal,
     required this.previousUnpaid,
@@ -102,6 +106,8 @@ class Bill {
       'markedAsPaidAt': markedAsPaidAt,
       'signatureUrl': signatureUrl,
       'discountedTotal': discountedTotal,
+      'paidToday': paidToday,
+      'paidTodayAt': paidTodayAt,
 
       'items': items.map((e) => e.toMap()).toList(),
     };
@@ -122,6 +128,7 @@ class Bill {
           map.containsKey('upiPayment') ? map['upiPayment'] as bool? : null,
 
       createdAt: map['createdAt'] ?? Timestamp.now(),
+      paidTodayAt: map['paidTodayAt'],
       markedAsPaidAt: map['markedAsPaidAt'],
       currentPurchaseTotal:
           (map['currentPurchaseTotal'] as num?)?.toDouble() ?? 0.0,
@@ -136,6 +143,7 @@ class Bill {
 
       discountedTotal: (map['discountedTotal'] as num?)?.toDouble() ?? 0.0,
       signatureUrl: map['signatureUrl'],
+      paidToday: (map['paidToday'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -149,6 +157,7 @@ class Bill {
     bool? upiPayment,
     Timestamp? createdAt,
     Timestamp? markedAsPaidAt,
+    Timestamp? paidTodayAt,
     double? total,
     double? currentPurchaseTotal,
     double? previousUnpaid,
@@ -158,6 +167,7 @@ class Bill {
     double? discountAmount,
     double? discountedTotal,
     String? signatureUrl,
+    double? paidToday,
   }) {
     return Bill(
       id: id ?? this.id,
@@ -168,11 +178,12 @@ class Bill {
       upiPayment: upiPayment ?? this.upiPayment,
       createdAt: createdAt ?? this.createdAt,
       markedAsPaidAt: markedAsPaidAt ?? this.markedAsPaidAt,
+      paidTodayAt: paidTodayAt ?? this.paidTodayAt,
       currentPurchaseTotal: currentPurchaseTotal ?? this.currentPurchaseTotal,
       paidAmount: paidAmount ?? this.paidAmount,
       previousUnpaid: previousUnpaid ?? this.previousUnpaid,
       balance: balance ?? this.balance,
-
+      paidToday: paidToday ?? this.paidToday,
       discountAmount: discountAmount ?? this.discountAmount,
       discountedTotal: discountedTotal ?? this.discountedTotal,
       signatureUrl: signatureUrl ?? this.signatureUrl,

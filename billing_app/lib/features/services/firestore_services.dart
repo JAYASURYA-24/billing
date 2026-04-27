@@ -300,6 +300,224 @@ class FirestoreService {
     await batch.commit();
   }
 
+  // Future<void> markBillsAsPaid(
+  //   List<Bill> bills,
+  //   double paidAmount,
+  //   bool upiPayment,
+  // ) async {
+  //   final batch = _db.batch();
+  //   double remainingPayment = paidAmount;
+
+  //   final sortedBills = [...bills]
+  //     ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+  //   for (int i = 0; i < sortedBills.length; i++) {
+  //     final bill = sortedBills[i];
+  //     final docRef = _db.collection('bills').doc(bill.id);
+
+  //     final originalBalance = bill.balance;
+  //     final alreadyPaid = bill.paidAmount;
+
+  //     if (remainingPayment >= originalBalance) {
+  //       batch.update(docRef, {
+  //         'isPaid': true,
+  //         'paidAmount': alreadyPaid + originalBalance,
+  //         'balance': 0.0,
+  //         'markedAsPaidAt': Timestamp.now(),
+  //         'upiPayment': upiPayment,
+  //       });
+  //       remainingPayment -= originalBalance;
+  //     } else {
+  //       final newPaidAmount = alreadyPaid + remainingPayment;
+  //       final newBalance = originalBalance - remainingPayment;
+
+  //       batch.update(docRef, {
+  //         'isPaid': newBalance == 0.0,
+  //         'paidAmount': newPaidAmount,
+  //         'balance': newBalance,
+  //         // 'markedAsPaidAt': Timestamp.now(),
+  //       });
+
+  //       remainingPayment = 0.0;
+
+  //       for (int j = i + 1; j < sortedBills.length; j++) {
+  //         final remainingBill = sortedBills[j];
+  //         final docRef = _db.collection('bills').doc(remainingBill.id);
+
+  //         batch.update(docRef, {
+  //           'isPaid': false,
+  //           'paidAmount': remainingBill.paidAmount,
+  //           'balance': remainingBill.balance,
+  //           // 'markedAsPaidAt': Timestamp.now(),
+  //         });
+  //       }
+
+  //       break;
+  //     }
+  //   }
+
+  //   await batch.commit();
+  // }
+
+  // Future<void> markBillsAsPaid(
+  //   List<Bill> bills,
+  //   double paidAmount,
+  //   bool upiPayment,
+  // ) async {
+  //   final batch = _db.batch();
+  //   double remainingPayment = paidAmount;
+
+  //   final sortedBills = [...bills]
+  //     ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+  //   for (int i = 0; i < sortedBills.length; i++) {
+  //     final bill = sortedBills[i];
+  //     final docRef = _db.collection('bills').doc(bill.id);
+
+  //     final originalBalance = bill.balance ?? 0.0;
+  //     final alreadyPaid = bill.paidAmount ?? 0.0;
+
+  //     // 💰 How much we pay to THIS bill in this transaction
+  //     double paidToThisBill = 0.0;
+
+  //     if (remainingPayment >= originalBalance) {
+  //       paidToThisBill = originalBalance;
+
+  //       batch.update(docRef, {
+  //         'isPaid': true,
+  //         'paidAmount': alreadyPaid + originalBalance,
+  //         'balance': 0.0,
+  //         'markedAsPaidAt': Timestamp.now(),
+  //         'upiPayment': upiPayment,
+
+  //         // 🟢 NEW FIELD → Amount paid now
+  //         'paidToday': paidToThisBill,
+  //       });
+
+  //       remainingPayment -= originalBalance;
+  //     } else {
+  //       paidToThisBill = remainingPayment;
+
+  //       final newPaidAmount = alreadyPaid + remainingPayment;
+  //       final newBalance = originalBalance - remainingPayment;
+
+  //       batch.update(docRef, {
+  //         'isPaid': newBalance == 0.0,
+  //         'paidAmount': newPaidAmount,
+  //         'balance': newBalance,
+
+  //         // 🟢 Only set timestamp when bill becomes paid
+  //         if (newBalance == 0.0) 'markedAsPaidAt': Timestamp.now(),
+
+  //         // 🟢 NEW FIELD
+  //         'paidToday': paidToThisBill,
+  //       });
+
+  //       remainingPayment = 0.0;
+
+  //       // All next bills remain untouched
+  //       for (int j = i + 1; j < sortedBills.length; j++) {
+  //         final rest = sortedBills[j];
+  //         final doc2 = _db.collection('bills').doc(rest.id);
+
+  //         batch.update(doc2, {
+  //           'isPaid': rest.isPaid,
+  //           'paidAmount': rest.paidAmount,
+  //           'balance': rest.balance,
+
+  //           // 🟡 VERY IMPORTANT → Not paid today
+  //           'paidToday': 0.0,
+  //         });
+  //       }
+
+  //       break;
+  //     }
+  //   }
+
+  //   await batch.commit();
+  // }
+
+  // Future<void> markBillsAsPaid(
+  //   List<Bill> bills,
+  //   double paidAmount,
+  //   bool upiPayment,
+  // ) async {
+  //   final batch = _db.batch();
+  //   double remainingPayment = paidAmount;
+
+  //   final sortedBills = [...bills]
+  //     ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+  //   for (int i = 0; i < sortedBills.length; i++) {
+  //     final bill = sortedBills[i];
+  //     final docRef = _db.collection('bills').doc(bill.id);
+
+  //     final originalBalance = bill.balance;
+  //     final alreadyPaid = bill.paidAmount;
+
+  //     double paidToThisBill = 0.0;
+
+  //     // --------------------------
+  //     // FULL PAYMENT CASE
+  //     // --------------------------
+  //     if (remainingPayment >= originalBalance) {
+  //       paidToThisBill = originalBalance;
+
+  //       batch.update(docRef, {
+  //         'isPaid': true,
+  //         'paidAmount': alreadyPaid + originalBalance,
+  //         'balance': 0.0,
+  //         'markedAsPaidAt': Timestamp.now(),
+  //         'upiPayment': upiPayment,
+
+  //         'paidToday': paidToThisBill,
+  //         'paidTodayAt': Timestamp.now(), // NEW
+  //       });
+
+  //       remainingPayment -= originalBalance;
+  //     }
+  //     // --------------------------
+  //     // PARTIAL PAYMENT CASE
+  //     // --------------------------
+  //     else {
+  //       paidToThisBill = remainingPayment;
+
+  //       final newPaidAmount = alreadyPaid + remainingPayment;
+  //       final newBalance = originalBalance - remainingPayment;
+
+  //       batch.update(docRef, {
+  //         'isPaid': newBalance == 0.0,
+  //         'paidAmount': newPaidAmount,
+  //         'balance': newBalance,
+
+  //         if (newBalance == 0.0) 'markedAsPaidAt': Timestamp.now(),
+  //         'upiPayment': upiPayment,
+
+  //         'paidToday': paidToThisBill,
+  //         'paidTodayAt': Timestamp.now(), // NEW
+  //       });
+
+  //       remainingPayment = 0.0;
+
+  //       // All next bills — untouched today
+  //       for (int j = i + 1; j < sortedBills.length; j++) {
+  //         final rest = sortedBills[j];
+  //         final doc2 = _db.collection('bills').doc(rest.id);
+
+  //         batch.update(doc2, {
+  //           'isPaid': rest.isPaid,
+  //           'paidAmount': rest.paidAmount,
+  //           'balance': rest.balance,
+  //           'paidToday': 0.0,
+  //         });
+  //       }
+
+  //       break;
+  //     }
+  //   }
+
+  //   await batch.commit();
+  // }
   Future<void> markBillsAsPaid(
     List<Bill> bills,
     double paidAmount,
@@ -308,6 +526,10 @@ class FirestoreService {
     final batch = _db.batch();
     double remainingPayment = paidAmount;
 
+    // Helper to fix floating-point issues
+    double fix(double v) => double.parse(v.toStringAsFixed(2));
+
+    // Sort bills oldest first
     final sortedBills = [...bills]
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
@@ -315,40 +537,67 @@ class FirestoreService {
       final bill = sortedBills[i];
       final docRef = _db.collection('bills').doc(bill.id);
 
-      final originalBalance = bill.balance;
-      final alreadyPaid = bill.paidAmount;
+      final originalBalance = fix(bill.balance);
+      final alreadyPaid = fix(bill.paidAmount);
 
+      double paidToThisBill = 0.0;
+
+      // ===========================================================
+      // FULL PAYMENT CASE
+      // ===========================================================
       if (remainingPayment >= originalBalance) {
+        paidToThisBill = originalBalance;
+
         batch.update(docRef, {
           'isPaid': true,
-          'paidAmount': alreadyPaid + originalBalance,
+          'paidAmount': fix(alreadyPaid + originalBalance),
           'balance': 0.0,
+
           'markedAsPaidAt': Timestamp.now(),
           'upiPayment': upiPayment,
+
+          'paidToday': fix(paidToThisBill),
+          'paidTodayAt': Timestamp.now(),
         });
-        remainingPayment -= originalBalance;
-      } else {
-        final newPaidAmount = alreadyPaid + remainingPayment;
-        final newBalance = originalBalance - remainingPayment;
+
+        remainingPayment = fix(remainingPayment - originalBalance);
+      }
+      // ===========================================================
+      // PARTIAL PAYMENT CASE
+      // ===========================================================
+      else {
+        paidToThisBill = fix(remainingPayment);
+
+        final newPaidAmount = fix(alreadyPaid + paidToThisBill);
+        final newBalance = fix(originalBalance - paidToThisBill);
 
         batch.update(docRef, {
           'isPaid': newBalance == 0.0,
           'paidAmount': newPaidAmount,
           'balance': newBalance,
-          // 'markedAsPaidAt': Timestamp.now(),
+
+          if (newBalance == 0.0) 'markedAsPaidAt': Timestamp.now(),
+
+          'upiPayment': upiPayment,
+
+          'paidToday': paidToThisBill,
+          'paidTodayAt': Timestamp.now(),
         });
 
         remainingPayment = 0.0;
 
+        // ===========================================================
+        // REMAINING BILLS → NOT TOUCHED TODAY
+        // ===========================================================
         for (int j = i + 1; j < sortedBills.length; j++) {
-          final remainingBill = sortedBills[j];
-          final docRef = _db.collection('bills').doc(remainingBill.id);
+          final rest = sortedBills[j];
+          final doc2 = _db.collection('bills').doc(rest.id);
 
-          batch.update(docRef, {
-            'isPaid': false,
-            'paidAmount': remainingBill.paidAmount,
-            'balance': remainingBill.balance,
-            // 'markedAsPaidAt': Timestamp.now(),
+          batch.update(doc2, {
+            'isPaid': rest.isPaid,
+            'paidAmount': fix(rest.paidAmount),
+            'balance': fix(rest.balance),
+            'paidToday': 0.0,
           });
         }
 
@@ -444,15 +693,136 @@ class FirestoreService {
         });
   }
 
-  Future<Map<String, Map<String, List<Bill>>>> fetchBillsByDate(
-    DateTime date,
-  ) async {
+  // Future<Map<String, Map<String, List<Bill>>>> fetchBillsByDate(
+  //   DateTime date,
+  // ) async {
+  //   final start = DateTime(date.year, date.month, date.day);
+  //   final end = start.add(const Duration(days: 1));
+
+  //   final billsCollection = FirebaseFirestore.instance.collection('bills');
+
+  //   // Fetch bills created today
+  //   final createdSnap =
+  //       await billsCollection
+  //           .where(
+  //             'createdAt',
+  //             isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+  //           )
+  //           .where('createdAt', isLessThan: Timestamp.fromDate(end))
+  //           .get();
+
+  //   // Fetch bills marked paid today
+  //   final paidSnap =
+  //       await billsCollection
+  //           .where(
+  //             'markedAsPaidAt',
+  //             isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+  //           )
+  //           .where('markedAsPaidAt', isLessThan: Timestamp.fromDate(end))
+  //           .get();
+
+  //   final createdBills =
+  //       createdSnap.docs.map((d) => Bill.fromFirestore(d)).toList();
+  //   final paidBills = paidSnap.docs.map((d) => Bill.fromFirestore(d)).toList();
+
+  //   // -------------------
+  //   // 🔹 Split created bills into categories
+  //   // -------------------
+
+  //   // final createdUpi = createdBills.where((b) => b.upiPayment == true).toList();
+  //   // final createdCash =
+  //   //     createdBills
+  //   //         .where((b) => b.upiPayment != true && b.isPaid == true)
+  //   //         .toList(); // Paid cash bills
+  //   // final createdUnpaid = createdBills.where((b) => b.isPaid == false).toList();
+
+  //   final createdUpi = createdBills.where((b) => b.upiPayment == true).toList();
+
+  //   final createdUnpaid = createdBills.where((b) => b.isPaid == false).toList();
+
+  //   final createdCash =
+  //       createdBills.where((b) {
+  //         // If unpaid, skip (already in unpaid)
+  //         if (b.isPaid == false) return false;
+
+  //         // If explicitly UPI, skip
+  //         if (b.upiPayment == true) return false;
+
+  //         // Cash = upiPayment == false or null
+  //         return true;
+  //       }).toList();
+
+  //   // -------------------
+  //   // 🔹 Split paid today bills
+  //   // Remove bills that were also created today
+  //   // -------------------
+  //   final createdIds = createdBills.map((b) => b.id).toSet();
+  //   final paidTodayFiltered =
+  //       paidBills.where((b) => !createdIds.contains(b.id)).toList();
+
+  //   final paidTodayUpi =
+  //       paidTodayFiltered.where((b) => b.upiPayment == true).toList();
+  //   final paidTodayCash =
+  //       paidTodayFiltered.where((b) => b.upiPayment != true).toList();
+
+  //   return {
+  //     "created": {
+  //       "upi": createdUpi,
+  //       "cash": createdCash,
+  //       "unpaid": createdUnpaid,
+  //     },
+  //     "paidToday": {"upi": paidTodayUpi, "cash": paidTodayCash},
+  //   };
+  // }
+
+  // Future<Map<String, List<Bill>>> fetchBillsByDate(DateTime date) async {
+  //   final start = DateTime(date.year, date.month, date.day);
+  //   final end = start.add(const Duration(days: 1));
+
+  //   final billsCollection = FirebaseFirestore.instance.collection('bills');
+
+  //   // 1️⃣ Created bills today
+  //   final createdSnap =
+  //       await billsCollection
+  //           .where(
+  //             'createdAt',
+  //             isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+  //           )
+  //           .where('createdAt', isLessThan: Timestamp.fromDate(end))
+  //           .get();
+
+  //   final createdBills =
+  //       createdSnap.docs.map((d) => Bill.fromFirestore(d)).toList();
+
+  //   // 2️⃣ Paid Today = ONLY FULL PAID bills
+  //   final paidSnap =
+  //       await billsCollection
+  //           .where('isPaid', isEqualTo: true)
+  //           .where(
+  //             'markedAsPaidAt',
+  //             isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+  //           )
+  //           .where('markedAsPaidAt', isLessThan: Timestamp.fromDate(end))
+  //           .get();
+
+  //   final paidBills = paidSnap.docs.map((d) => Bill.fromFirestore(d)).toList();
+
+  //   // Remove bills created today from paidToday
+  //   final createdIds = createdBills.map((b) => b.id).toSet();
+  //   final paidToday =
+  //       paidBills.where((b) => !createdIds.contains(b.id)).toList();
+
+  //   return {'created': createdBills, 'paidToday': paidToday};
+  // }
+  Future<Map<String, List<Bill>>> fetchBillsByDate(DateTime date) async {
     final start = DateTime(date.year, date.month, date.day);
     final end = start.add(const Duration(days: 1));
 
     final billsCollection = FirebaseFirestore.instance.collection('bills');
 
-    // Fetch bills created today
+    // ----------------------------------------
+    // 1️⃣ BILLS CREATED TODAY
+    // ----------------------------------------
     final createdSnap =
         await billsCollection
             .where(
@@ -462,68 +832,29 @@ class FirestoreService {
             .where('createdAt', isLessThan: Timestamp.fromDate(end))
             .get();
 
-    // Fetch bills marked paid today
+    final createdBills =
+        createdSnap.docs.map((d) => Bill.fromFirestore(d)).toList();
+
+    // ----------------------------------------
+    // 2️⃣ ALL payments made today (full or partial)
+    // ----------------------------------------
     final paidSnap =
         await billsCollection
             .where(
-              'markedAsPaidAt',
+              'paidTodayAt',
               isGreaterThanOrEqualTo: Timestamp.fromDate(start),
             )
-            .where('markedAsPaidAt', isLessThan: Timestamp.fromDate(end))
+            .where('paidTodayAt', isLessThan: Timestamp.fromDate(end))
             .get();
 
-    final createdBills =
-        createdSnap.docs.map((d) => Bill.fromFirestore(d)).toList();
     final paidBills = paidSnap.docs.map((d) => Bill.fromFirestore(d)).toList();
 
-    // -------------------
-    // 🔹 Split created bills into categories
-    // -------------------
-
-    // final createdUpi = createdBills.where((b) => b.upiPayment == true).toList();
-    // final createdCash =
-    //     createdBills
-    //         .where((b) => b.upiPayment != true && b.isPaid == true)
-    //         .toList(); // Paid cash bills
-    // final createdUnpaid = createdBills.where((b) => b.isPaid == false).toList();
-
-    final createdUpi = createdBills.where((b) => b.upiPayment == true).toList();
-
-    final createdUnpaid = createdBills.where((b) => b.isPaid == false).toList();
-
-    final createdCash =
-        createdBills.where((b) {
-          // If unpaid, skip (already in unpaid)
-          if (b.isPaid == false) return false;
-
-          // If explicitly UPI, skip
-          if (b.upiPayment == true) return false;
-
-          // Cash = upiPayment == false or null
-          return true;
-        }).toList();
-
-    // -------------------
-    // 🔹 Split paid today bills
-    // Remove bills that were also created today
-    // -------------------
+    // Remove bills created today from "paidToday"
     final createdIds = createdBills.map((b) => b.id).toSet();
-    final paidTodayFiltered =
+    final paidToday =
         paidBills.where((b) => !createdIds.contains(b.id)).toList();
 
-    final paidTodayUpi =
-        paidTodayFiltered.where((b) => b.upiPayment == true).toList();
-    final paidTodayCash =
-        paidTodayFiltered.where((b) => b.upiPayment != true).toList();
-
-    return {
-      "created": {
-        "upi": createdUpi,
-        "cash": createdCash,
-        "unpaid": createdUnpaid,
-      },
-      "paidToday": {"upi": paidTodayUpi, "cash": paidTodayCash},
-    };
+    return {'created': createdBills, 'paidToday': paidToday};
   }
 
   // Future<Map<String, Map<String, List<Bill>>>> fetchBillsByDate(
