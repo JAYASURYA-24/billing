@@ -1,9 +1,16 @@
 import 'package:billing/features/models/product.dart';
 import 'package:billing/features/models/shop.dart';
+import 'package:billing/features/models/bill.dart';
 import 'package:billing/features/services/firestore_services.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:io';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:intl/intl.dart';
 
 import '../providers/product_provider.dart';
 import '../providers/shop_provider.dart';
@@ -17,6 +24,75 @@ class AdminScreen extends ConsumerStatefulWidget {
 
 class _AdminScreenState extends ConsumerState<AdminScreen> {
   String _searchQuery = '';
+
+  Future<void> _generateProductPdf(WidgetRef ref, List<Product> products) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final firestoreService = ref.read(firestoreServiceProvider);
+      final now = DateTime.now();
+      final billsData = await firestoreService.fetchBillsByDate(now);
+      final createdBills = billsData['created'] ?? [];
+      
+      final Map<String, int> dailySoldQty = {};
+      for (final bill in createdBills) {
+        for (final item in bill.items) {
+          dailySoldQty[item.productId] = (dailySoldQty[item.productId] ?? 0) + item.quantity;
+        }
+      }
+
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return [
+              pw.Header(
+                level: 0,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Product Stock Report', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+                    pw.Text(DateFormat('dd MMM yyyy').format(now), style: const pw.TextStyle(fontSize: 16)),
+                  ]
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.TableHelper.fromTextArray(
+                headers: ['Product Name', 'Daily Sold Quantity', 'Remaining Quantity'],
+                data: products.map((p) {
+                  final sold = dailySoldQty[p.id] ?? 0;
+                  return [p.name, sold.toString(), p.quantity.toString()];
+                }).toList(),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+                cellAlignment: pw.Alignment.center,
+                cellStyle: const pw.TextStyle(fontSize: 12),
+              ),
+            ];
+          },
+        ),
+      );
+
+      final bytes = await pdf.save();
+      if (!mounted) return;
+      Navigator.pop(context); // close dialog
+      
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/Product_Stock_Report_${DateFormat('ddMMyyyy').format(now)}.pdf');
+      await file.writeAsBytes(bytes);
+      await OpenFilex.open(file.path);
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // close dialog
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error generating PDF: $e')));
+    }
+  }
 
   // void _showProductDialog(
   //   BuildContext context,
@@ -580,6 +656,19 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                               onChanged: (value) {
                                 setState(() => _searchQuery = value);
                               },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            decoration: const BoxDecoration(
+                              color: Color.fromARGB(255, 2, 113, 192),
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              icon: const Icon(Icons.picture_as_pdf),
+                              color: Colors.white,
+                              tooltip: 'Download PDF',
+                              onPressed: () => _generateProductPdf(ref, filteredProducts),
                             ),
                           ),
                           const SizedBox(width: 8),
