@@ -1007,16 +1007,16 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
   //             pw.SizedBox(height: 10),
 
   //             pw.Text(
-  //               "Paid UPI Total: ₹${totalPaidUPI_created.toStringAsFixed(2)}",
+  //               "Paid UPI Total: \$${totalPaidUPI_created.toStringAsFixed(2)}",
   //             ),
   //             pw.Text(
-  //               "Paid Cash Total: ₹${totalPaidCash_created.toStringAsFixed(2)}",
+  //               "Paid Cash Total: \$${totalPaidCash_created.toStringAsFixed(2)}",
   //             ),
   //             pw.Text(
-  //               "Unpaid Total: ₹${totalUnpaid_created.toStringAsFixed(2)}",
+  //               "Unpaid Total: \$${totalUnpaid_created.toStringAsFixed(2)}",
   //             ),
   //             pw.Text(
-  //               "Total Sale Today: ₹${total_created_today.toStringAsFixed(2)}",
+  //               "Total Sale Today: \$${total_created_today.toStringAsFixed(2)}",
   //             ),
 
   //             pw.SizedBox(height: 20),
@@ -1031,12 +1031,12 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
   //             pw.SizedBox(height: 10),
 
   //             pw.Text(
-  //               "Paid UPI Total: ₹${totalPaidUPI_today.toStringAsFixed(2)}",
+  //               "Paid UPI Total: \$${totalPaidUPI_today.toStringAsFixed(2)}",
   //             ),
   //             pw.Text(
-  //               "Paid Cash Total: ₹${totalPaidCash_today.toStringAsFixed(2)}",
+  //               "Paid Cash Total: \$${totalPaidCash_today.toStringAsFixed(2)}",
   //             ),
-  //             pw.Text("Total outstanding paid today: ₹${""}"),
+  //             pw.Text("Total outstanding paid today: \$${""}"),
   //           ],
   //     ),
   //   );
@@ -1268,16 +1268,16 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
   //               pw.SizedBox(height: 20),
 
   //               pw.Text(
-  //                 "Paid UPI Total (Created): ₹${totalPaidUPI_created.toStringAsFixed(2)}",
+  //                 "Paid UPI Total (Created): \$${totalPaidUPI_created.toStringAsFixed(2)}",
   //               ),
   //               pw.Text(
-  //                 "Paid Cash Total (Created): ₹${totalPaidCash_created.toStringAsFixed(2)}",
+  //                 "Paid Cash Total (Created): \$${totalPaidCash_created.toStringAsFixed(2)}",
   //               ),
   //               pw.Text(
-  //                 "Unpaid Total (Created): ₹${totalUnpaid_created.toStringAsFixed(2)}",
+  //                 "Unpaid Total (Created): \$${totalUnpaid_created.toStringAsFixed(2)}",
   //               ),
   //               pw.Text(
-  //                 "Total Sale Today: ₹${total_created_today.toStringAsFixed(2)}",
+  //                 "Total Sale Today: \$${total_created_today.toStringAsFixed(2)}",
   //               ),
 
   //               pw.SizedBox(height: 20),
@@ -1292,10 +1292,10 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
   //               pw.SizedBox(height: 10),
 
   //               pw.Text(
-  //                 "Paid UPI Today: ₹${totalPaidUPI_today.toStringAsFixed(2)}",
+  //                 "Paid UPI Today: \$${totalPaidUPI_today.toStringAsFixed(2)}",
   //               ),
   //               pw.Text(
-  //                 "Paid Cash Today: ₹${totalPaidCash_today.toStringAsFixed(2)}",
+  //                 "Paid Cash Today: \$${totalPaidCash_today.toStringAsFixed(2)}",
   //               ),
   //             ],
   //       ),
@@ -1569,16 +1569,16 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                 pw.SizedBox(height: 10),
 
                 pw.Text(
-                  "Paid UPI Total: ₹${totalPaidUPI_created.toStringAsFixed(2)}",
+                  "Paid UPI Total: \$${totalPaidUPI_created.toStringAsFixed(2)}",
                 ),
                 pw.Text(
-                  "Paid Cash Total: ₹${totalPaidCash_created.toStringAsFixed(2)}",
+                  "Paid Cash Total: \$${totalPaidCash_created.toStringAsFixed(2)}",
                 ),
                 pw.Text(
-                  "Unpaid Total: ₹${totalUnpaid_created.toStringAsFixed(2)}",
+                  "Unpaid Total: \$${totalUnpaid_created.toStringAsFixed(2)}",
                 ),
                 pw.Text(
-                  "Total Sale Today: ₹${total_created_today.toStringAsFixed(2)}",
+                  "Total Sale Today: \$${total_created_today.toStringAsFixed(2)}",
                 ),
 
                 pw.SizedBox(height: 20),
@@ -1593,14 +1593,14 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                 pw.SizedBox(height: 10),
 
                 pw.Text(
-                  "Paid UPI Today: ₹${totalPaidUPI_today.toStringAsFixed(2)}",
+                  "Paid UPI Today: \$${totalPaidUPI_today.toStringAsFixed(2)}",
                 ),
                 pw.Text(
-                  "Paid Cash Today: ₹${totalPaidCash_today.toStringAsFixed(2)}",
+                  "Paid Cash Today: \$${totalPaidCash_today.toStringAsFixed(2)}",
                 ),
 
                 pw.Text(
-                  "Outstanding Paid Today: ₹${outstandingToday.toStringAsFixed(2)}",
+                  "Outstanding Paid Today: \$${outstandingToday.toStringAsFixed(2)}",
                 ),
               ],
         ),

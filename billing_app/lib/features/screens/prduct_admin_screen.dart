@@ -45,6 +45,16 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         }
       }
 
+      int totalSold = 0;
+      int totalRemaining = 0;
+      final List<List<String>> tableData = products.map((p) {
+        final sold = dailySoldQty[p.id] ?? 0;
+        totalSold += sold;
+        totalRemaining += p.quantity;
+        return [p.name, sold.toString(), p.quantity.toString()];
+      }).toList();
+      tableData.add(['TOTAL', totalSold.toString(), totalRemaining.toString()]);
+
       final pdf = pw.Document();
 
       pdf.addPage(
@@ -65,10 +75,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
               pw.SizedBox(height: 20),
               pw.TableHelper.fromTextArray(
                 headers: ['Product Name', 'Daily Sold Quantity', 'Remaining Quantity'],
-                data: products.map((p) {
-                  final sold = dailySoldQty[p.id] ?? 0;
-                  return [p.name, sold.toString(), p.quantity.toString()];
-                }).toList(),
+                data: tableData,
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
                 headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
                 cellAlignment: pw.Alignment.center,
