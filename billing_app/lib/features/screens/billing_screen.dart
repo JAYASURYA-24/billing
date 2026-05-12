@@ -1129,8 +1129,6 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                 showLoadingDialog(context);
 
                 ref.invalidate(billingProvider);
-                ref.invalidate(productsProvider);
-                ref.invalidate(shopNamesProvider);
                 ref.invalidate(selectedShopProvider);
 
                 shopNameController.clear();

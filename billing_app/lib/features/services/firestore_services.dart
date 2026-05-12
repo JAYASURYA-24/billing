@@ -168,9 +168,11 @@ class FirestoreService {
   }
 
   Stream<List<Map<String, dynamic>>> streamShopsWithPaidBills() {
+    final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
     return _db
         .collection('bills')
         .where('isPaid', isEqualTo: true)
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(thirtyDaysAgo))
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {

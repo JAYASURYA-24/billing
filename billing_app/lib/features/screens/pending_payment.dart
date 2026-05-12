@@ -36,6 +36,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
 
   String shopQuery = '';
   String billSearch = '';
+  Future<Bill?>? _billFuture;
 
   // Filter variables
   DateTime? selectedDate;
@@ -2132,7 +2133,16 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                       ),
                     ),
                   ),
-                  onSubmitted: (val) => setState(() => billSearch = val.trim()),
+                  onSubmitted: (val) {
+                    setState(() {
+                      billSearch = val.trim();
+                      if (billSearch.isNotEmpty) {
+                        _billFuture = firestore.fetchBillByNumber(billSearch);
+                      } else {
+                        _billFuture = null;
+                      }
+                    });
+                  },
                 ),
               ),
               Expanded(
@@ -2142,7 +2152,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                           child: Text('Enter a bill number to search.'),
                         )
                         : FutureBuilder<Bill?>(
-                          future: firestore.fetchBillByNumber(billSearch),
+                          future: _billFuture,
                           builder: (context, snapshot) {
                             if (snapshot.connectionState ==
                                 ConnectionState.waiting) {
@@ -2368,9 +2378,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                     ); // ONLY delete here
                                   });
 
-                                  // 🔥 After transaction is finished → now refresh providers
-                                  ref.invalidate(paidBillsProvider);
-                                  ref.invalidate(unpaidBillsProvider);
+                                  // 🔥 No need to invalidate StreamProviders listening to .snapshots()
 
                                   setState(() {
                                     filteredBills.removeWhere(
@@ -2703,9 +2711,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                     ); // ONLY delete here
                                   });
 
-                                  // 🔥 After transaction is finished → now refresh providers
-                                  ref.invalidate(paidBillsProvider);
-                                  ref.invalidate(unpaidBillsProvider);
+                                  // 🔥 No need to invalidate StreamProviders listening to .snapshots()
 
                                   setState(() {
                                     filteredBills.removeWhere(
@@ -3004,7 +3010,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                     );
                                   });
 
-                                  ref.invalidate(unpaidBillsProvider);
+                                  // 🔥 No need to invalidate StreamProviders listening to .snapshots()
                                   Navigator.pop(context);
 
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -3196,63 +3202,58 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
   }
 }
 
-
-
-
-
-
 //delete all bills button
-   // actions: [
-        //   Padding(
-        //     padding: const EdgeInsets.only(right: 10),
-        //     child: ElevatedButton(
-        //       style: ElevatedButton.styleFrom(
-        //         backgroundColor: const Color.fromARGB(255, 226, 88, 78),
-        //         foregroundColor: Colors.white,
-        //       ),
-        //       onPressed: () async {
-        //         final confirmed = await showDialog<bool>(
-        //           barrierDismissible: false,
-        //           context: context,
-        //           builder:
-        //               (ctx) => AlertDialog(
-        //                 backgroundColor: const Color(0xFFE3F2FD),
-        //                 title: const Text('Delete ALL Bills?'),
-        //                 content: const Text(
-        //                   '⚠️ This will delete the entire bills collection.\nAre you sure?',
-        //                 ),
-        //                 actions: [
-        //                   TextButton(
-        //                     onPressed: () => Navigator.of(ctx).pop(false),
-        //                     child: const Text(
-        //                       'Cancel',
-        //                       style: TextStyle(color: Colors.blue),
-        //                     ),
-        //                   ),
-        //                   ElevatedButton(
-        //                     style: ElevatedButton.styleFrom(
-        //                       backgroundColor: Colors.red,
-        //                     ),
-        //                     onPressed: () => Navigator.of(ctx).pop(true),
-        //                     child: const Text(
-        //                       'Delete All',
-        //                       style: TextStyle(color: Colors.white),
-        //                     ),
-        //                   ),
-        //                 ],
-        //               ),
-        //         );
+// actions: [
+//   Padding(
+//     padding: const EdgeInsets.only(right: 10),
+//     child: ElevatedButton(
+//       style: ElevatedButton.styleFrom(
+//         backgroundColor: const Color.fromARGB(255, 226, 88, 78),
+//         foregroundColor: Colors.white,
+//       ),
+//       onPressed: () async {
+//         final confirmed = await showDialog<bool>(
+//           barrierDismissible: false,
+//           context: context,
+//           builder:
+//               (ctx) => AlertDialog(
+//                 backgroundColor: const Color(0xFFE3F2FD),
+//                 title: const Text('Delete ALL Bills?'),
+//                 content: const Text(
+//                   '⚠️ This will delete the entire bills collection.\nAre you sure?',
+//                 ),
+//                 actions: [
+//                   TextButton(
+//                     onPressed: () => Navigator.of(ctx).pop(false),
+//                     child: const Text(
+//                       'Cancel',
+//                       style: TextStyle(color: Colors.blue),
+//                     ),
+//                   ),
+//                   ElevatedButton(
+//                     style: ElevatedButton.styleFrom(
+//                       backgroundColor: Colors.red,
+//                     ),
+//                     onPressed: () => Navigator.of(ctx).pop(true),
+//                     child: const Text(
+//                       'Delete All',
+//                       style: TextStyle(color: Colors.white),
+//                     ),
+//                   ),
+//                 ],
+//               ),
+//         );
 
-        //         if (confirmed == true) {
-        //           await ref.read(firestoreServiceProvider).deleteAllBills();
-        //           ScaffoldMessenger.of(context).clearSnackBars();
-        //           ScaffoldMessenger.of(context).showSnackBar(
-        //             const SnackBar(content: Text('All bills deleted')),
-        //           );
-        //           setState(() {});
-        //         }
-        //       },
-        //       child: const Text('Delete All Bills'),
-        //     ),
-        //   ),
-        // ],
+//         if (confirmed == true) {
+//           await ref.read(firestoreServiceProvider).deleteAllBills();
+//           ScaffoldMessenger.of(context).clearSnackBars();
+//           ScaffoldMessenger.of(context).showSnackBar(
+//             const SnackBar(content: Text('All bills deleted')),
+//           );
+//           setState(() {});
+//         }
+//       },
+//       child: const Text('Delete All Bills'),
+//     ),
+//   ),
+// ],
