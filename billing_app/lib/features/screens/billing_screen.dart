@@ -7,6 +7,7 @@ import 'package:billing/features/models/product.dart';
 import 'package:billing/features/models/shop.dart';
 import 'package:billing/features/providers/bill_provider.dart';
 import 'package:billing/features/providers/shop_provider.dart';
+import 'package:billing/features/providers/product_provider.dart';
 
 import 'package:billing/features/services/pdfservices.dart';
 import 'package:flutter/material.dart';
@@ -675,36 +676,63 @@ class _BillingScreenState extends ConsumerState<BillingScreen> {
                                 setState(() => showPaymentAlert = false);
                               }
 
-                              await showLoadingWhile(context, () async {
-                                shopNameController.clear();
+                              try {
+                                await showLoadingWhile(context, () async {
+                                  shopNameController.clear();
 
-                                final (finalBill, _) = await ref
-                                    .read(billingProvider.notifier)
-                                    .generateBill(
-                                      shopName,
-                                      tempPaid,
-                                      paidAmount: paidAmount,
-                                      upiPayment: upiPayment,
-                                      discountAmount: discountAmount,
-                                      discountedTotal: discountedCurrentTotal,
-                                      signatureBytes: customerSignBytes,
-                                    );
+                                  final (finalBill, _) = await ref
+                                      .read(billingProvider.notifier)
+                                      .generateBill(
+                                        shopName,
+                                        tempPaid,
+                                        paidAmount: paidAmount,
+                                        upiPayment: upiPayment,
+                                        discountAmount: discountAmount,
+                                        discountedTotal: discountedCurrentTotal,
+                                        signatureBytes: customerSignBytes,
+                                      );
 
-                                ref.read(selectedShopProvider.notifier).state =
-                                    null;
+                                  ref
+                                      .read(selectedShopProvider.notifier)
+                                      .state = null;
 
-                                await generateAndOpenPdf(
-                                  finalBill,
-                                  previousBillsTallied,
-                                  signBytes: customerSignBytes,
-                                );
+                                  await generateAndOpenPdf(
+                                    finalBill,
+                                    previousBillsTallied,
+                                    signBytes: customerSignBytes,
+                                  );
 
-                                _resetSignature();
-                                paidAmountController.clear();
-                                discountPercentController.clear();
+                                  _resetSignature();
+                                  paidAmountController.clear();
+                                  discountPercentController.clear();
 
-                                Navigator.pop(context);
-                              }());
+                                  Navigator.pop(context);
+                                }());
+                              } catch (e) {
+                                if (context.mounted) {
+                                  showDialog(
+                                    barrierDismissible: false,
+                                    context: context,
+                                    builder:
+                                        (ctx) => AlertDialog(
+                                          title: const Text(
+                                            'Error Saving Bill',
+                                            style: TextStyle(color: Colors.red),
+                                          ),
+                                          content: Text(
+                                            'An error occurred while communicating with the database.\n\nDetails: $e',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed:
+                                                  () => Navigator.pop(ctx),
+                                              child: const Text('OK'),
+                                            ),
+                                          ],
+                                        ),
+                                  );
+                                }
+                              }
                             },
 
                             // onPressed: () async {

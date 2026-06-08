@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../models/product.dart';
 import '../models/bill.dart';
 import '../services/firestore_services.dart';
+import '../providers/shop_provider.dart';
 
 final isRefreshProvider = StateProvider<bool>((ref) => false);
 
@@ -16,19 +17,33 @@ final billingProvider = StateNotifierProvider<BillingNotifier, Bill>((ref) {
   return BillingNotifier(ref);
 });
 
-final productsProvider = StreamProvider<List<Product>>((ref) {
-  final firestoreService = ref.watch(firestoreServiceProvider);
-  return firestoreService.productsStream();
-});
 
 final unpaidBillsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
   final firestore = ref.watch(firestoreServiceProvider);
-  return firestore.streamShopsWithUnPaidBills();
+  final shop = ref.watch(selectedShopProvider);
+  
+  if (shop != null) {
+    return firestore.streamShopsWithUnPaidBills(null, null, shop.name);
+  } else {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = start.add(const Duration(days: 1));
+    return firestore.streamShopsWithUnPaidBills(start, end, null);
+  }
 });
 
 final paidBillsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
   final firestore = ref.watch(firestoreServiceProvider);
-  return firestore.streamShopsWithPaidBills();
+  final shop = ref.watch(selectedShopProvider);
+  
+  if (shop != null) {
+    return firestore.streamShopsWithPaidBills(null, null, shop.name);
+  } else {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = start.add(const Duration(days: 1));
+    return firestore.streamShopsWithPaidBills(start, end, null);
+  }
 });
 
 class BillingNotifier extends StateNotifier<Bill> {
@@ -221,12 +236,10 @@ class BillingNotifier extends StateNotifier<Bill> {
       transaction.set(billRef, newBill.toMap());
     });
     final firestoreService = ref.read(firestoreServiceProvider);
-    for (final item in state.items) {
-      await firestoreService.decreaseProductQuantity(
-        item.productId,
-        item.quantity,
-      );
-    }
+    final productDecrements = {
+      for (final item in state.items) item.productId: item.quantity
+    };
+    await firestoreService.decreaseMultipleProductsQuantity(productDecrements);
 
     state = Bill(
       id: const Uuid().v4(),

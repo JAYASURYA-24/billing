@@ -3,6 +3,7 @@ import 'package:billing/features/screens/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:animated_notch_bottom_bar/animated_notch_bottom_bar/animated_notch_bottom_bar.dart';
 import 'package:flutter/foundation.dart';
@@ -20,6 +21,10 @@ void main() async {
   } else {
     // Mobile/Desktop Firebase initialization
     await Firebase.initializeApp();
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
   }
 
   runApp(const ProviderScope(child: BillingApp()));

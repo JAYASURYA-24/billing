@@ -71,6 +71,7 @@ class _ShopDropdownState extends ConsumerState<ShopDropdown> {
             GestureDetector(
               onTap: () => setState(() => _dropdownOpen = !_dropdownOpen),
               child: AbsorbPointer(
+                absorbing: selectedShop == null, // Allow clicking suffix icon when selected
                 child: TextField(
                   controller:
                       widget.controller..text = selectedShop?.name ?? '',
@@ -80,10 +81,21 @@ class _ShopDropdownState extends ConsumerState<ShopDropdown> {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    suffixIcon: RotatedBox(
-                      quarterTurns: 3,
-                      child: Icon(Icons.arrow_back_ios_rounded, size: 16),
-                    ),
+                    suffixIcon: selectedShop != null
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, color: Colors.red),
+                            onPressed: () {
+                              ref.read(selectedShopProvider.notifier).state = null;
+                              widget.controller.clear();
+                              setState(() {
+                                _dropdownOpen = false;
+                              });
+                            },
+                          )
+                        : const RotatedBox(
+                            quarterTurns: 3,
+                            child: Icon(Icons.arrow_back_ios_rounded, size: 16),
+                          ),
                   ),
                 ),
               ),
