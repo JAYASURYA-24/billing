@@ -1,9 +1,16 @@
 import 'package:billing/features/models/product.dart';
 import 'package:billing/features/models/shop.dart';
+import 'package:billing/features/models/bill.dart';
 import 'package:billing/features/services/firestore_services.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:io';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:intl/intl.dart';
 
 import '../providers/product_provider.dart';
 import '../providers/shop_provider.dart';
@@ -18,184 +25,108 @@ class AdminScreen extends ConsumerStatefulWidget {
 class _AdminScreenState extends ConsumerState<AdminScreen> {
   String _searchQuery = '';
 
-  // void _showProductDialog(
-  //   BuildContext context,
-  //   WidgetRef ref, {
-  //   Product? product,
-  // }) {
-  //   final _nameController = TextEditingController(text: product?.name ?? '');
+  Future<void> _generateProductPdf(
+    WidgetRef ref,
+    List<Product> products,
+  ) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
 
-  //   final isEdit = product != null;
+    try {
+      final firestoreService = ref.read(firestoreServiceProvider);
+      final now = DateTime.now();
+      final billsData = await firestoreService.fetchBillsByDate(now);
+      final createdBills = billsData['created'] ?? [];
 
-  //   showDialog(
-  //     barrierDismissible: false,
-  //     context: context,
-  //     builder:
-  //         (_) => AlertDialog(
-  //           backgroundColor: const Color(0xFFE3F2FD),
-  //           title: Text(isEdit ? 'Edit Product' : 'Add Product'),
-  //           content: Column(
-  //             mainAxisSize: MainAxisSize.min,
-  //             children: [
-  //               TextFormField(
-  //                 controller: _nameController,
-  //                 cursorColor: const Color.fromARGB(255, 2, 113, 192),
-  //                 decoration: const InputDecoration(
-  //                   labelText: 'Product Name',
-  //                   labelStyle: TextStyle(color: Colors.black),
-  //                   focusedBorder: UnderlineInputBorder(
-  //                     borderSide: BorderSide(
-  //                       color: Color.fromARGB(255, 2, 113, 192),
-  //                     ),
-  //                   ),
-  //                 ),
-  //               ),
-  //             ],
-  //           ),
-  //           actions: [
-  //             TextButton(
-  //               onPressed: () => Navigator.pop(context),
-  //               child: const Text(
-  //                 'Cancel',
-  //                 style: TextStyle(color: Colors.red),
-  //               ),
-  //             ),
-  //             ElevatedButton(
-  //               style: ButtonStyle(
-  //                 backgroundColor: WidgetStatePropertyAll(Colors.white),
-  //               ),
-  //               child: Text(
-  //                 isEdit ? 'Update' : 'Add',
-  //                 style: const TextStyle(color: Color.fromARGB(255, 0, 161, 5)),
-  //               ),
-  //               onPressed: () {
-  //                 final name = _nameController.text.trim();
+      final Map<String, int> dailySoldQty = {};
+      for (final bill in createdBills) {
+        for (final item in bill.items) {
+          dailySoldQty[item.productId] =
+              (dailySoldQty[item.productId] ?? 0) + item.quantity;
+        }
+      }
 
-  //                 if (name.isEmpty) return;
+      int totalSold = 0;
+      int totalRemaining = 0;
+      final List<List<String>> tableData =
+          products.map((p) {
+            final sold = dailySoldQty[p.id] ?? 0;
+            totalSold += sold;
+            totalRemaining += p.quantity;
+            return [p.name, sold.toString(), p.quantity.toString()];
+          }).toList();
+      tableData.add(['TOTAL', totalSold.toString(), totalRemaining.toString()]);
 
-  //                 final newProduct = Product(id: product?.id ?? '', name: name);
+      final pdf = pw.Document();
 
-  //                 if (isEdit) {
-  //                   ref
-  //                       .read(productProvider.notifier)
-  //                       .updateProduct(newProduct);
-  //                 } else {
-  //                   ref.read(productProvider.notifier).addProduct(newProduct);
-  //                 }
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return [
+              pw.Header(
+                level: 0,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      'Product Stock Report',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Text(
+                      DateFormat('dd MMM yyyy').format(now),
+                      style: const pw.TextStyle(fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.TableHelper.fromTextArray(
+                headers: [
+                  'Product Name',
+                  'Daily Sold Quantity',
+                  'Remaining Quantity',
+                ],
+                data: tableData,
+                headerStyle: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.white,
+                ),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.blueGrey800,
+                ),
+                cellAlignment: pw.Alignment.center,
+                cellStyle: const pw.TextStyle(fontSize: 12),
+              ),
+            ];
+          },
+        ),
+      );
 
-  //                 Navigator.pop(context);
-  //               },
-  //             ),
-  //           ],
-  //         ),
-  //   );
-  // }
+      final bytes = await pdf.save();
+      if (!mounted) return;
+      Navigator.pop(context); // close dialog
 
-  // void _showProductDialog(
-  //   BuildContext context,
-  //   WidgetRef ref, {
-  //   Product? product,
-  // }) {
-  //   final _nameController = TextEditingController(text: product?.name ?? '');
-
-  //   final _quantityController = TextEditingController();
-
-  //   final isEdit = product != null;
-
-  //   showDialog(
-  //     barrierDismissible: false,
-  //     context: context,
-  //     builder:
-  //         (_) => AlertDialog(
-  //           backgroundColor: const Color(0xFFE3F2FD),
-  //           title: Text(isEdit ? 'Edit Product' : 'Add Product'),
-  //           content: SingleChildScrollView(
-  //             child: Column(
-  //               mainAxisSize: MainAxisSize.min,
-  //               children: [
-  //                 TextFormField(
-  //                   controller: _nameController,
-  //                   cursorColor: const Color.fromARGB(255, 2, 113, 192),
-  //                   decoration: const InputDecoration(
-  //                     labelText: 'Product Name',
-  //                     labelStyle: TextStyle(color: Colors.black),
-  //                     focusedBorder: UnderlineInputBorder(
-  //                       borderSide: BorderSide(
-  //                         color: Color.fromARGB(255, 2, 113, 192),
-  //                       ),
-  //                     ),
-  //                   ),
-  //                 ),
-  //                 const SizedBox(height: 10),
-
-  //                 const SizedBox(height: 10),
-  //                 TextFormField(
-  //                   controller: _quantityController,
-  //                   keyboardType: TextInputType.number,
-  //                   cursorColor: const Color.fromARGB(255, 2, 113, 192),
-  //                   decoration: const InputDecoration(
-  //                     labelText: 'Quantity',
-  //                     labelStyle: TextStyle(color: Colors.black),
-  //                     focusedBorder: UnderlineInputBorder(
-  //                       borderSide: BorderSide(
-  //                         color: Color.fromARGB(255, 2, 113, 192),
-  //                       ),
-  //                     ),
-  //                   ),
-  //                 ),
-  //               ],
-  //             ),
-  //           ),
-  //           actions: [
-  //             TextButton(
-  //               onPressed: () => Navigator.pop(context),
-  //               child: const Text(
-  //                 'Cancel',
-  //                 style: TextStyle(color: Colors.red),
-  //               ),
-  //             ),
-  //             ElevatedButton(
-  //               style: const ButtonStyle(
-  //                 backgroundColor: WidgetStatePropertyAll(Colors.white),
-  //               ),
-  //               child: Text(
-  //                 isEdit ? 'Update' : 'Add',
-  //                 style: const TextStyle(color: Color.fromARGB(255, 0, 161, 5)),
-  //               ),
-  //               onPressed: () async {
-  //                 final name = _nameController.text.trim();
-
-  //                 final quantity =
-  //                     int.tryParse(_quantityController.text.trim()) ?? 0;
-
-  //                 if (name.isEmpty) return;
-
-  //                 final firestoreService = ref.read(firestoreServiceProvider);
-
-  //                 if (isEdit) {
-  //                   // ✅ Instead of replacing, add to existing quantity
-  //                   await firestoreService.increaseProductQuantity(
-  //                     product!.id,
-  //                     quantity,
-  //                   );
-  //                 } else {
-  //                   // Add a new product (first time)
-  //                   final newProduct = Product(
-  //                     id: product?.id ?? '',
-  //                     name: name,
-
-  //                     quantity: quantity,
-  //                   );
-  //                   ref.read(productProvider.notifier).addProduct(newProduct);
-  //                 }
-
-  //                 Navigator.pop(context);
-  //               },
-  //             ),
-  //           ],
-  //         ),
-  //   );
-  // }
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File(
+        '${dir.path}/Product_Stock_Report_${DateFormat('ddMMyyyy').format(now)}.pdf',
+      );
+      await file.writeAsBytes(bytes);
+      await OpenFilex.open(file.path);
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // close dialog
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error generating PDF: $e')));
+    }
+  }
 
   void _showProductDialog(
     BuildContext context,
@@ -338,7 +269,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                             name: name,
                           );
                           ref
-                              .read(productProvider.notifier)
+                              .read(firestoreServiceProvider)
                               .addProduct(newProduct);
                         }
 
@@ -406,9 +337,9 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                       final newShop = Shop(id: shopId ?? '', name: newShopName);
 
                       if (isEdit) {
-                        ref.read(shopProvider.notifier).updateShop(newShop);
+                        ref.read(firestoreServiceProvider).updateShop(newShop);
                       } else {
-                        ref.read(shopProvider.notifier).addShop(newShop);
+                        ref.read(firestoreServiceProvider).addShop(newShop);
                       }
 
                       Navigator.pop(context);
@@ -455,7 +386,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     );
 
     if (shouldDelete == true) {
-      ref.read(productProvider.notifier).deleteProduct(product.id);
+      ref.read(firestoreServiceProvider).deleteProduct(product.id);
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(
         context,
@@ -493,7 +424,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     );
 
     if (shouldDelete == true) {
-      await ref.read(shopProvider.notifier).deleteShop(shop.id);
+      await ref.read(firestoreServiceProvider).deleteShop(shop.id);
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(
         context,
@@ -580,6 +511,23 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                               onChanged: (value) {
                                 setState(() => _searchQuery = value);
                               },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            decoration: const BoxDecoration(
+                              color: Color.fromARGB(255, 2, 113, 192),
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              icon: const Icon(Icons.picture_as_pdf),
+                              color: Colors.white,
+                              tooltip: 'Download PDF',
+                              onPressed:
+                                  () => _generateProductPdf(
+                                    ref,
+                                    filteredProducts,
+                                  ),
                             ),
                           ),
                           const SizedBox(width: 8),

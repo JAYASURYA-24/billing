@@ -4,6 +4,8 @@ import 'package:billing/features/providers/role_provider.dart';
 import 'package:billing/features/screens/deletedBills.dart';
 
 import 'package:billing/features/services/pdfservices.dart';
+import 'package:billing/core/widgets/shopserach.dart';
+import 'package:billing/features/providers/shop_provider.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +23,8 @@ import 'package:pdf/widgets.dart' as pw;
 
 import 'dart:io';
 
+import '../models/shop.dart';
+
 class BillExplorerScreen extends ConsumerStatefulWidget {
   const BillExplorerScreen({Key? key}) : super(key: key);
 
@@ -33,760 +37,39 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
   late TabController _tabController;
   final _searchController = TextEditingController();
   final _billSearchController = TextEditingController();
+  final _shopDropdownController = TextEditingController();
 
-  String shopQuery = '';
+
   String billSearch = '';
 
-  // Filter variables
-  DateTime? selectedDate;
-  DateTime? selectedMonth;
-  String filterType = 'none';
+  void _handleTabSelection() {
+    if (!_tabController.indexIsChanging) {
+      setState(() {});
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_handleTabSelection);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(selectedShopProvider.notifier).state = null;
+    });
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
     _searchController.dispose();
     _billSearchController.dispose();
+    _shopDropdownController.dispose();
     super.dispose();
   }
 
-  bool _matchesDateFilter(Bill bill) {
-    if (filterType == 'none') return true;
+  // Local filtering methods removed as filtering is now done in Firestore
 
-    final DateTime? billDate =
-        bill.isPaid ? bill.markedAsPaidAt?.toDate() : bill.createdAt.toDate();
-
-    if (billDate == null) return false;
-
-    if (filterType == 'date' && selectedDate != null) {
-      return billDate.year == selectedDate!.year &&
-          billDate.month == selectedDate!.month &&
-          billDate.day == selectedDate!.day;
-    }
-
-    if (filterType == 'month' && selectedMonth != null) {
-      return billDate.year == selectedMonth!.year &&
-          billDate.month == selectedMonth!.month;
-    }
-
-    return true;
-  }
-
-  List<Map<String, dynamic>> _filterShopsData(
-    List<Map<String, dynamic>> shopsData,
-  ) {
-    if (filterType == 'none') {
-      return shopsData
-          .map((shopData) {
-            final List<Bill> bills = shopData['bills'] as List<Bill>;
-
-            if (bills.isEmpty) return null;
-
-            double total = 0;
-            if (shopData.containsKey('totalPaid')) {
-              total = bills.fold<double>(
-                0,
-                (sum, bill) => sum + bill.discountedTotal,
-              );
-              return {
-                'shopName': shopData['shopName'],
-                'bills': bills,
-                'count': bills.length,
-                'totalPaid': total,
-              };
-            } else {
-              total = bills.fold<double>(0, (sum, bill) => sum + bill.balance);
-              return {
-                'shopName': shopData['shopName'],
-                'bills': bills,
-                'count': bills.length,
-                'totalUnPaid': total,
-              };
-            }
-          })
-          .where((shop) => shop != null)
-          .cast<Map<String, dynamic>>()
-          .toList();
-    }
-
-    return shopsData
-        .map((shopData) {
-          final List<Bill> bills = shopData['bills'] as List<Bill>;
-          final filteredBills = bills.where(_matchesDateFilter).toList();
-
-          if (filteredBills.isEmpty) return null;
-
-          double total = 0;
-          if (shopData.containsKey('totalPaid')) {
-            total = filteredBills.fold<double>(
-              0,
-              (sum, bill) => sum + bill.discountedTotal,
-            );
-            return {
-              'shopName': shopData['shopName'],
-              'bills': filteredBills,
-              'count': filteredBills.length,
-              'totalPaid': total,
-            };
-          } else {
-            total = filteredBills.fold<double>(
-              0,
-              (sum, bill) => sum + bill.balance,
-            );
-            return {
-              'shopName': shopData['shopName'],
-              'bills': filteredBills,
-              'count': filteredBills.length,
-              'totalUnPaid': total,
-            };
-          }
-        })
-        .where((shop) => shop != null)
-        .cast<Map<String, dynamic>>()
-        .toList();
-  }
-
-  Map<String, double> _calculateDailyAndMonthlyTotals(
-    List<Map<String, dynamic>> shopsData,
-    bool isPaid,
-  ) {
-    final today = DateTime.now();
-    final currentMonth = DateTime(today.year, today.month);
-
-    double dailyTotal = 0.0;
-    double monthlyTotal = 0.0;
-
-    for (final shopData in shopsData) {
-      final List<Bill> bills = shopData['bills'] as List<Bill>;
-
-      for (final bill in bills) {
-        final DateTime? billDate =
-            isPaid ? bill.markedAsPaidAt?.toDate() : bill.createdAt.toDate();
-
-        if (billDate == null) continue;
-
-        final billDateOnly = DateTime(
-          billDate.year,
-          billDate.month,
-          billDate.day,
-        );
-        final todayOnly = DateTime(today.year, today.month, today.day);
-
-        if (billDateOnly.isAtSameMomentAs(todayOnly)) {
-          dailyTotal += isPaid ? bill.discountedTotal : bill.balance;
-        }
-
-        if (billDate.year == currentMonth.year &&
-            billDate.month == currentMonth.month) {
-          monthlyTotal += isPaid ? bill.discountedTotal : bill.balance;
-        }
-      }
-    }
-
-    return {'daily': dailyTotal, 'monthly': monthlyTotal};
-  }
-
-  Widget _buildFilterChipsWithTotals(
-    List<Map<String, dynamic>> shopsData,
-    bool isPaid,
-  ) {
-    final totals = _calculateDailyAndMonthlyTotals(shopsData, isPaid);
-    final today = DateTime.now();
-
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              FilterChip(
-                selected: filterType == 'date',
-                label: Text(
-                  selectedDate != null
-                      ? DateFormat('dd/MM/yyyy').format(selectedDate!)
-                      : 'Filter by Date',
-                ),
-                selectedColor: Colors.blue.shade100,
-                onSelected: (bool selected) async {
-                  if (selected) {
-                    final DateTime? picked = await showDatePicker(
-                      barrierDismissible: false,
-                      context: context,
-                      initialDate: selectedDate ?? DateTime.now(),
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime.now(),
-                      builder: (BuildContext context, Widget? child) {
-                        return Theme(
-                          data: Theme.of(context).copyWith(
-                            dialogBackgroundColor: Colors.blueGrey[900],
-                            colorScheme: ColorScheme.light(
-                              primary: Color.fromARGB(255, 2, 113, 192),
-                              onPrimary: Colors.white,
-                              onSurface: Colors.black,
-                            ),
-                            textButtonTheme: TextButtonThemeData(
-                              style: TextButton.styleFrom(
-                                foregroundColor: Color.fromARGB(
-                                  255,
-                                  2,
-                                  113,
-                                  192,
-                                ),
-                              ),
-                            ),
-                          ),
-                          child: child!,
-                        );
-                      },
-                    );
-                    if (picked != null) {
-                      setState(() {
-                        selectedDate = picked;
-                        selectedMonth = null;
-                        filterType = 'date';
-                      });
-                    }
-                  } else {
-                    setState(() {
-                      selectedDate = null;
-                      filterType = 'none';
-                    });
-                  }
-                },
-              ),
-              const SizedBox(width: 8),
-
-              FilterChip(
-                selected: filterType == 'month',
-                label: Text(
-                  selectedMonth != null
-                      ? DateFormat('MMM yyyy').format(selectedMonth!)
-                      : 'Filter by Month',
-                ),
-                selectedColor: Colors.green.shade100,
-                onSelected: (bool selected) async {
-                  if (selected) {
-                    final DateTime? picked = await showMonthPicker(
-                      context: context,
-                      initialDate: selectedMonth ?? DateTime.now(),
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime.now(),
-                    );
-                    if (picked != null) {
-                      setState(() {
-                        selectedMonth = picked;
-                        selectedDate = null;
-                        filterType = 'month';
-                      });
-                    }
-                  } else {
-                    setState(() {
-                      selectedMonth = null;
-                      filterType = 'none';
-                    });
-                  }
-                },
-              ),
-
-              if (filterType != 'none') ...[
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.clear, color: Colors.red),
-                  onPressed: () {
-                    setState(() {
-                      selectedDate = null;
-                      selectedMonth = null;
-                      filterType = 'none';
-                    });
-                  },
-                  tooltip: 'Clear Filter',
-                ),
-              ],
-            ],
-          ),
-
-          const SizedBox(height: 8),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: isPaid ? Colors.green.shade50 : Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isPaid ? Colors.green.shade200 : Colors.red.shade200,
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.today,
-                      size: 16,
-                      color:
-                          isPaid ? Colors.green.shade700 : Colors.red.shade700,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Today: \$ ${(totals['daily'] ?? 0).toDouble().toStringAsFixed(2)}',
-
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color:
-                            isPaid
-                                ? Colors.green.shade700
-                                : Colors.red.shade700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: isPaid ? Colors.green.shade50 : Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isPaid ? Colors.green.shade200 : Colors.red.shade200,
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.calendar_month,
-                      size: 16,
-                      color:
-                          isPaid ? Colors.green.shade700 : Colors.red.shade700,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${DateFormat('MMM yyyy').format(today)}: \$ ${(totals['monthly'] ?? 0).toDouble().toStringAsFixed(2)}',
-
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color:
-                            isPaid
-                                ? Colors.green.shade700
-                                : Colors.red.shade700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Future<void> _generateReportPdf(
-  //   BuildContext context,
-  //   WidgetRef ref,
-  //   DateTime date,
-  // ) async {
-  //   final firestore = ref.read(firestoreServiceProvider);
-
-  //   print("STEP 1: Starting PDF...");
-  //   final result = await firestore.fetchBillsByDate(date);
-  //   print("STEP 2: Data fetched");
-
-  //   final createdUpi = result["created"]?["upi"] ?? <Bill>[];
-  //   final createdCash = result["created"]?["cash"] ?? <Bill>[];
-  //   final createdUnpaid = result["created"]?["unpaid"] ?? <Bill>[];
-
-  //   print(
-  //     "STEP 3: Created bills: UPI=${createdUpi.length}, Cash=${createdCash.length}, Unpaid=${createdUnpaid.length}",
-  //   );
-
-  //   final paidTodayUpi = result["paidToday"]?["upi"] ?? <Bill>[];
-  //   final paidTodayCash = result["paidToday"]?["cash"] ?? <Bill>[];
-
-  //   print(
-  //     "STEP 4: Paid Today: UPI=${paidTodayUpi.length}, Cash=${paidTodayCash.length}",
-  //   );
-
-  //   // -------------------
-  //   // Remove duplicates
-  //   // -------------------
-  //   List<Bill> removeDuplicateBills(List<Bill> bills) {
-  //     final seen = <String>{};
-  //     return bills.where((b) => seen.add(b.id)).toList();
-  //   }
-
-  //   final allCreated = removeDuplicateBills([
-  //     ...createdUpi,
-  //     ...createdCash,
-  //     ...createdUnpaid,
-  //   ]);
-
-  //   final allPaidToday = removeDuplicateBills([
-  //     ...paidTodayUpi,
-  //     ...paidTodayCash,
-  //   ]);
-
-  //   // -------------------
-  //   // Totals
-  //   // -------------------
-  //   double sumTotal(List<Bill> bills) =>
-  //       bills.fold(0.0, (sum, b) => sum + (b.discountedTotal ?? 0.0));
-
-  //   final createdUpiTotal = sumTotal(createdUpi);
-  //   final createdCashTotal = sumTotal(createdCash);
-  //   final createdUnpaidTotal = sumTotal(createdUnpaid);
-
-  //   final paidTodayUpiTotal = sumTotal(paidTodayUpi);
-  //   final paidTodayCashTotal = sumTotal(paidTodayCash);
-
-  //   final overallCreatedTotal =
-  //       createdUpiTotal + createdCashTotal + createdUnpaidTotal;
-  //   final overallOutstandingTotal = paidTodayUpiTotal + paidTodayCashTotal;
-
-  //   print("STEP 5: Loading fonts...");
-  //   final fontRegular = pw.Font.ttf(
-  //     await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'),
-  //   );
-  //   final fontBold = pw.Font.ttf(
-  //     await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'),
-  //   );
-
-  //   final pdf = pw.Document(
-  //     theme: pw.ThemeData.withFont(base: fontRegular, bold: fontBold),
-  //   );
-
-  //   // -------------------
-  //   // Bill Status Helper
-  //   // -------------------
-  //   String getBillStatus(Bill b) {
-  //     if (b.isPaid == false) return "Unpaid";
-  //     if (b.upiPayment == true) return "UPI";
-  //     return "Cash";
-  //   }
-
-  //   // -------------------
-  //   // Build a COMPLETE section (title + table)
-  //   // -------------------
-  //   // pw.Widget buildCompleteSection(String title, List<Bill> bills) {
-  //   //   final data = List.generate(bills.length, (i) {
-  //   //     final b = bills[i];
-  //   //     return [
-  //   //       (i + 1).toString(),
-  //   //       b.shopName ?? "",
-  //   //       getBillStatus(b),
-  //   //       (b.discountedTotal ?? 0.0).toStringAsFixed(2),
-  //   //       b.billNumber ?? "",
-  //   //     ];
-  //   //   });
-
-  //   //   return pw.Column(
-  //   //     crossAxisAlignment: pw.CrossAxisAlignment.start,
-  //   //     children: [
-  //   //       pw.Center(
-  //   //         child: pw.Text(
-  //   //           title,
-  //   //           style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-  //   //         ),
-  //   //       ),
-  //   //       pw.SizedBox(height: 8),
-  //   //       pw.Table.fromTextArray(
-  //   //         headers: ['S.No', 'Shop', 'Status', 'Amount', 'Bill No'],
-  //   //         data: data,
-  //   //         headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-  //   //         cellAlignment: pw.Alignment.centerLeft,
-  //   //         headerDecoration: pw.BoxDecoration(
-  //   //           border: pw.Border(bottom: pw.BorderSide(width: 0.5)),
-  //   //         ),
-  //   //       ),
-  //   //       pw.SizedBox(height: 20),
-  //   //     ],
-  //   //   );
-  //   // }
-
-  //   pw.Widget buildCompleteSection(
-  //     String title,
-  //     List<Bill> bills,
-  //     int startIndex,
-  //   ) {
-  //     final data = List.generate(bills.length, (i) {
-  //       final b = bills[i];
-  //       return [
-  //         (startIndex + i + 1).toString(), // <-- continue serial number
-  //         b.shopName ?? "",
-  //         getBillStatus(b),
-  //         (b.discountedTotal ?? 0.0).toStringAsFixed(2),
-  //         b.billNumber ?? "",
-  //       ];
-  //     });
-
-  //     return pw.Column(
-  //       crossAxisAlignment: pw.CrossAxisAlignment.start,
-  //       children: [
-  //         pw.Center(
-  //           child: pw.Text(
-  //             title,
-  //             style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-  //           ),
-  //         ),
-  //         pw.SizedBox(height: 8),
-  //         pw.Table.fromTextArray(
-  //           headers: ['S.No', 'Shop', 'Status', 'Amount', 'Bill No'],
-  //           data: data,
-  //           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-  //           cellAlignment: pw.Alignment.centerLeft,
-  //           headerDecoration: pw.BoxDecoration(
-  //             border: pw.Border(bottom: pw.BorderSide(width: 0.5)),
-  //           ),
-  //         ),
-  //         pw.SizedBox(height: 20),
-  //       ],
-  //     );
-  //   }
-
-  //   // -------------------
-  //   // Build summary section
-  //   // -------------------
-  //   pw.Widget buildSummarySection() {
-  //     return pw.Column(
-  //       crossAxisAlignment: pw.CrossAxisAlignment.start,
-  //       children: [
-  //         pw.Text(
-  //           "Summary",
-  //           style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-  //         ),
-  //         pw.SizedBox(height: 8),
-  //         pw.Row(
-  //           crossAxisAlignment: pw.CrossAxisAlignment.start,
-  //           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-  //           children: [
-  //             pw.Column(
-  //               crossAxisAlignment: pw.CrossAxisAlignment.start,
-  //               children: [
-  //                 pw.Text(
-  //                   "Created Bills",
-  //                   style: pw.TextStyle(
-  //                     fontSize: 14,
-  //                     fontWeight: pw.FontWeight.bold,
-  //                   ),
-  //                 ),
-  //                 pw.SizedBox(height: 6),
-  //                 pw.Text("UPI : ${createdUpiTotal.toStringAsFixed(2)}"),
-  //                 pw.Text("Cash : ${createdCashTotal.toStringAsFixed(2)}"),
-  //                 pw.Text("Unpaid : ${createdUnpaidTotal.toStringAsFixed(2)}"),
-  //                 pw.SizedBox(height: 6),
-  //                 pw.Text(
-  //                   "Total : ${overallCreatedTotal.toStringAsFixed(2)}",
-  //                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-  //                 ),
-  //               ],
-  //             ),
-  //             pw.Column(
-  //               crossAxisAlignment: pw.CrossAxisAlignment.start,
-  //               children: [
-  //                 pw.Text(
-  //                   "Outstanding Paid Today",
-  //                   style: pw.TextStyle(
-  //                     fontSize: 14,
-  //                     fontWeight: pw.FontWeight.bold,
-  //                   ),
-  //                 ),
-  //                 pw.SizedBox(height: 6),
-  //                 pw.Text("UPI : ${paidTodayUpiTotal.toStringAsFixed(2)}"),
-  //                 pw.Text("Cash : ${paidTodayCashTotal.toStringAsFixed(2)}"),
-  //                 pw.SizedBox(height: 6),
-  //                 pw.Text(
-  //                   "Total : ${overallOutstandingTotal.toStringAsFixed(2)}",
-  //                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-  //                 ),
-  //               ],
-  //             ),
-  //           ],
-  //         ),
-  //       ],
-  //     );
-  //   }
-
-  //   // -------------------
-  //   // Helper to split bills into chunks (for large tables)
-  //   // -------------------
-  //   List<List<Bill>> splitBills(List<Bill> bills, int chunkSize) {
-  //     List<List<Bill>> chunks = [];
-  //     for (var i = 0; i < bills.length; i += chunkSize) {
-  //       final end =
-  //           (i + chunkSize < bills.length) ? i + chunkSize : bills.length;
-  //       chunks.add(bills.sublist(i, end));
-  //     }
-  //     return chunks;
-  //   }
-
-  //   // -------------------
-  //   // Split tables into manageable chunks
-  //   // -------------------
-  //   final createdChunks = splitBills(allCreated, 25);
-  //   final paidTodayChunks = splitBills(allPaidToday, 26);
-
-  //   // -------------------
-  //   // Add pages for Created Bills
-  //   // -------------------
-  //   // for (var chunk in createdChunks) {
-  //   //   pdf.addPage(
-  //   //     pw.MultiPage(
-  //   //       pageFormat: PdfPageFormat.a4,
-  //   //       margin: const pw.EdgeInsets.all(20),
-  //   //       build:
-  //   //           (context) => [
-  //   //             pw.Text(
-  //   //               'Bills Report - ${DateFormat('dd/MM/yyyy').format(date)}',
-  //   //               style: pw.TextStyle(
-  //   //                 fontSize: 18,
-  //   //                 fontWeight: pw.FontWeight.bold,
-  //   //               ),
-  //   //             ),
-  //   //             pw.SizedBox(height: 12),
-  //   //             buildCompleteSection("Created Bills", chunk),
-  //   //           ],
-  //   //     ),
-  //   //   );
-  //   // }
-
-  //   int serial = 0; // global serial for Created Bills
-
-  //   // -------------------
-  //   // Created Bills Section
-  //   // -------------------
-
-  //   for (var i = 0; i < createdChunks.length; i++) {
-  //     pdf.addPage(
-  //       pw.MultiPage(
-  //         pageFormat: PdfPageFormat.a4,
-  //         margin: const pw.EdgeInsets.all(20),
-  //         build: (context) {
-  //           final children = <pw.Widget>[];
-  //           // Only print title and date for the first chunk
-  //           if (i == 0) {
-  //             children.add(
-  //               pw.Text(
-  //                 'Bills Report - ${DateFormat('dd/MM/yyyy').format(date)}',
-  //                 style: pw.TextStyle(
-  //                   fontSize: 18,
-  //                   fontWeight: pw.FontWeight.bold,
-  //                 ),
-  //               ),
-  //             );
-  //             children.add(pw.SizedBox(height: 12));
-  //           }
-
-  //           children.add(
-  //             buildCompleteSection("Created Bills", createdChunks[i], serial),
-  //           );
-
-  //           serial += createdChunks[i].length;
-  //           return children;
-  //         },
-  //       ),
-  //     );
-  //   }
-
-  //   // -------------------
-  //   // Outstanding Paid Today Section
-  //   // -------------------
-  //   serial = 0; // reset serial for new section
-
-  //   for (var i = 0; i < paidTodayChunks.length; i++) {
-  //     pdf.addPage(
-  //       pw.MultiPage(
-  //         pageFormat: PdfPageFormat.a4,
-  //         margin: const pw.EdgeInsets.all(20),
-  //         build: (context) {
-  //           final children = <pw.Widget>[];
-  //           // Only print section title on the first chunk
-  //           // if (i == 0) {
-  //           //   children.add(
-  //           //     pw.Text(
-  //           //       'Outstanding Paid Today',
-  //           //       style: pw.TextStyle(
-  //           //         fontSize: 18,
-  //           //         fontWeight: pw.FontWeight.bold,
-  //           //       ),
-  //           //     ),
-  //           //   );
-  //           //   children.add(pw.SizedBox(height: 12));
-  //           // }
-
-  //           children.add(
-  //             buildCompleteSection(
-  //               "Outstanding Paid Today",
-  //               paidTodayChunks[i],
-  //               serial,
-  //             ),
-  //           );
-  //           serial += paidTodayChunks[i].length;
-  //           return children;
-  //         },
-  //       ),
-  //     );
-  //   }
-
-  //   // -------------------
-  //   // Summary Page
-  //   // -------------------
-  //   pdf.addPage(
-  //     pw.MultiPage(
-  //       pageFormat: PdfPageFormat.a4,
-  //       margin: const pw.EdgeInsets.all(20),
-  //       build: (context) => [buildSummarySection()],
-  //     ),
-  //   );
-
-  //   // -------------------
-  //   // Save PDF
-  //   // -------------------
-  //   final dir = await getApplicationDocumentsDirectory();
-  //   final path =
-  //       "${dir.path}/Bills_Report_${DateFormat('ddMMyyyy').format(date)}.pdf";
-  //   final file = File(path);
-  //   await file.writeAsBytes(await pdf.save());
-  //   await OpenFilex.open(file.path);
-
-  //   print("PDF Generated at: $path");
-  // }
-
-  // Future<void> _generateReportPdf(
-  //   BuildContext context,
-  //   WidgetRef ref,
-  //   DateTime date,
-  // ) async {
-  //   final firestore = ref.read(firestoreServiceProvider);
-  //   final result = await firestore.fetchBillsByDate(date);
-
-  //   final createdCash = result["created"]?["cash"] ?? [];
-  //   final createdUpi = result["created"]?["upi"] ?? [];
-  //   final createdUnpaid = result["created"]?["unpaid"] ?? [];
-
-  //   final paidTodayCash = result["paidToday"]?["cash"] ?? [];
-  //   final paidTodayUpi = result["paidToday"]?["upi"] ?? [];
-
-  //   final allCreated = [...createdCash, ...createdUpi, ...createdUnpaid];
-  //   final allPaidToday = [...paidTodayCash, ...paidTodayUpi];
   String classifyStatus(Bill b) {
     // FULL PAID
     if (b.isPaid == true) {
@@ -803,521 +86,6 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
     // FULL UNPAID
     return "Unpaid";
   }
-
-  // Future<void> _generateReportPdf(
-  //   BuildContext context,
-  //   WidgetRef ref,
-  //   DateTime date,
-  // ) async {
-  //   final result = await ref
-  //       .read(firestoreServiceProvider)
-  //       .fetchBillsByDate(date);
-
-  //   List<Bill> created = result["created"]!;
-  //   List<Bill> paidToday = result["paidToday"]!;
-
-  //   // Load fonts
-  //   final fontRegular = pw.Font.ttf(
-  //     await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'),
-  //   );
-  //   final fontBold = pw.Font.ttf(
-  //     await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'),
-  //   );
-
-  //   final pdf = pw.Document(
-  //     theme: pw.ThemeData.withFont(base: fontRegular, bold: fontBold),
-  //   );
-
-  //   // Status sorting order
-  //   final Map<String, int> statusRank = {
-  //     "Paid (UPI)": 0,
-  //     "Paid (Cash)": 1,
-  //     "Half Paid (UPI)": 2,
-  //     "Half Paid (Cash)": 3,
-  //     "Unpaid": 4,
-  //   };
-
-  //   // Sort by Status → Date
-  //   List<Bill> sortBills(List<Bill> bills) {
-  //     bills.sort((a, b) {
-  //       final sa = classifyStatus(a);
-  //       final sb = classifyStatus(b);
-  //       final ra = statusRank[sa]!;
-  //       final rb = statusRank[sb]!;
-  //       if (ra != rb) return ra - rb;
-  //       return a.createdAt.compareTo(b.createdAt);
-  //     });
-  //     return bills;
-  //   }
-
-  //   created = sortBills([...created]);
-  //   paidToday = sortBills([...paidToday]);
-
-  //   // Build table rows
-  //   List<List<String>> buildRows(List<Bill> bills) {
-  //     int i = 1;
-  //     return bills.map((b) {
-  //       return [
-  //         (i++).toString(),
-  //         b.shopName ?? '',
-  //         classifyStatus(b),
-  //         (b.discountedTotal ?? 0).toStringAsFixed(2),
-  //         (b.paidAmount ?? 0).toStringAsFixed(2),
-  //         (b.balance ?? 0).toStringAsFixed(2),
-  //         b.billNumber ?? '',
-  //       ];
-  //     }).toList();
-  //   }
-
-  //   double fullPaidUPI(List<Bill> bills) => bills
-  //       .where((b) => b.isPaid == true && b.upiPayment == true)
-  //       .fold(0, (s, b) => s + (b.discountedTotal ?? 0));
-
-  //   double fullPaidCash(List<Bill> bills) => bills
-  //       .where((b) => b.isPaid == true && b.upiPayment != true)
-  //       .fold(0, (s, b) => s + (b.discountedTotal ?? 0));
-
-  //   // HALF PAID (only paid amount)
-  //   double halfPaidUPI(List<Bill> bills) => bills
-  //       .where((b) => !b.isPaid && b.paidAmount > 0 && (b.upiPayment == true))
-  //       .fold(0, (s, b) => s + (b.paidAmount ?? 0));
-
-  //   double halfPaidCash(List<Bill> bills) => bills
-  //       .where((b) => !b.isPaid && b.paidAmount > 0 && (b.upiPayment != true))
-  //       .fold(0, (s, b) => s + (b.paidAmount ?? 0));
-
-  //   // UNPAID TOTAL (half paid balance + fully unpaid)
-  //   double unpaidTotal(List<Bill> bills) =>
-  //       bills.fold(0, (s, b) => s + (b.balance ?? 0));
-
-  //   // CREATED TOTALS
-  //   final totalPaidUPI_created = fullPaidUPI(created) + halfPaidUPI(created);
-
-  //   final totalPaidCash_created = fullPaidCash(created) + halfPaidCash(created);
-
-  //   final totalUnpaid_created = unpaidTotal(created);
-
-  //   final total_created_today =
-  //       totalPaidUPI_created + totalPaidCash_created + totalUnpaid_created;
-
-  //   // PAID TODAY TOTALS
-  //   final totalPaidUPI_today = fullPaidUPI(paidToday) + halfPaidUPI(paidToday);
-
-  //   final totalPaidCash_today =
-  //       fullPaidCash(paidToday) + halfPaidCash(paidToday);
-
-  //   pdf.addPage(
-  //     pw.MultiPage(
-  //       pageFormat: PdfPageFormat.a4,
-  //       margin: const pw.EdgeInsets.all(20),
-  //       build:
-  //           (context) => [
-  //             pw.Text(
-  //               "Bills Report - ${DateFormat('dd/MM/yyyy').format(date)}",
-  //               style: pw.TextStyle(
-  //                 fontSize: 20,
-  //                 fontWeight: pw.FontWeight.bold,
-  //               ),
-  //             ),
-  //             pw.SizedBox(height: 15),
-
-  //             pw.Text(
-  //               "Created Bills",
-  //               style: pw.TextStyle(
-  //                 fontSize: 16,
-  //                 fontWeight: pw.FontWeight.bold,
-  //               ),
-  //             ),
-  //             pw.SizedBox(height: 10),
-
-  //             pw.TableHelper.fromTextArray(
-  //               headers: [
-  //                 "S.No",
-  //                 "Shop",
-  //                 "Status",
-  //                 "Amount",
-  //                 "Paid",
-  //                 "Balance",
-  //                 "Bill No",
-  //               ],
-  //               data: buildRows(created),
-  //               headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-  //               cellAlignment: pw.Alignment.centerLeft,
-  //             ),
-  //           ],
-  //     ),
-  //   );
-
-  //   // PAGE 2 - PAID TODAY
-  //   pdf.addPage(
-  //     pw.MultiPage(
-  //       pageFormat: PdfPageFormat.a4,
-  //       margin: const pw.EdgeInsets.all(20),
-  //       build:
-  //           (context) => [
-  //             pw.Text(
-  //               "Paid Today",
-  //               style: pw.TextStyle(
-  //                 fontSize: 16,
-  //                 fontWeight: pw.FontWeight.bold,
-  //               ),
-  //             ),
-  //             pw.SizedBox(height: 10),
-
-  //             pw.TableHelper.fromTextArray(
-  //               headers: [
-  //                 "S.No",
-  //                 "Shop",
-  //                 "Status",
-  //                 "Amount",
-  //                 "Paid",
-  //                 "Balance",
-  //                 "Bill No",
-  //               ],
-  //               data: buildRows(paidToday),
-  //               headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-  //               cellAlignment: pw.Alignment.centerLeft,
-  //             ),
-  //           ],
-  //     ),
-  //   );
-
-  //   pdf.addPage(
-  //     pw.MultiPage(
-  //       pageFormat: PdfPageFormat.a4,
-  //       margin: const pw.EdgeInsets.all(20),
-  //       build:
-  //           (context) => [
-  //             pw.Text(
-  //               "Summary",
-  //               style: pw.TextStyle(
-  //                 fontSize: 18,
-  //                 fontWeight: pw.FontWeight.bold,
-  //               ),
-  //             ),
-  //             pw.SizedBox(height: 20),
-
-  //             pw.Text(
-  //               "Created Bills Summary",
-  //               style: pw.TextStyle(
-  //                 fontSize: 16,
-  //                 fontWeight: pw.FontWeight.bold,
-  //               ),
-  //             ),
-  //             pw.SizedBox(height: 10),
-
-  //             pw.Text(
-  //               "Paid UPI Total: ₹${totalPaidUPI_created.toStringAsFixed(2)}",
-  //             ),
-  //             pw.Text(
-  //               "Paid Cash Total: ₹${totalPaidCash_created.toStringAsFixed(2)}",
-  //             ),
-  //             pw.Text(
-  //               "Unpaid Total: ₹${totalUnpaid_created.toStringAsFixed(2)}",
-  //             ),
-  //             pw.Text(
-  //               "Total Sale Today: ₹${total_created_today.toStringAsFixed(2)}",
-  //             ),
-
-  //             pw.SizedBox(height: 20),
-
-  //             pw.Text(
-  //               "Paid Today Summary",
-  //               style: pw.TextStyle(
-  //                 fontSize: 16,
-  //                 fontWeight: pw.FontWeight.bold,
-  //               ),
-  //             ),
-  //             pw.SizedBox(height: 10),
-
-  //             pw.Text(
-  //               "Paid UPI Total: ₹${totalPaidUPI_today.toStringAsFixed(2)}",
-  //             ),
-  //             pw.Text(
-  //               "Paid Cash Total: ₹${totalPaidCash_today.toStringAsFixed(2)}",
-  //             ),
-  //             pw.Text("Total outstanding paid today: ₹${""}"),
-  //           ],
-  //     ),
-  //   );
-
-  //   // Save PDF
-  //   final dir = await getApplicationDocumentsDirectory();
-  //   final file = File(
-  //     "${dir.path}/Bills_Report_${DateFormat('ddMMyyyy').format(date)}.pdf",
-  //   );
-
-  //   await file.writeAsBytes(await pdf.save());
-  //   await OpenFilex.open(file.path);
-  // }
-
-  // Future<void> _generateReportPdf(
-  //   BuildContext context,
-  //   WidgetRef ref,
-  //   DateTime date,
-  // ) async {
-  //   try {
-  //     final result = await ref
-  //         .read(firestoreServiceProvider)
-  //         .fetchBillsByDate(date);
-
-  //     List<Bill> created = result["created"] ?? [];
-  //     List<Bill> paidToday = result["paidToday"] ?? [];
-
-  //     // Load fonts
-  //     final fontRegular = pw.Font.ttf(
-  //       await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'),
-  //     );
-  //     final fontBold = pw.Font.ttf(
-  //       await rootBundle.load('assets/fonts/NotoSans-Bold.ttf'),
-  //     );
-
-  //     final pdf = pw.Document(
-  //       theme: pw.ThemeData.withFont(base: fontRegular, bold: fontBold),
-  //     );
-
-  //     //---------------------------------------------------------------------------
-  //     // STATUS SORTING
-  //     //---------------------------------------------------------------------------
-  //     String classifyStatus(Bill b) {
-  //       if (b.isPaid == true) {
-  //         if (b.upiPayment == true) return "Paid (UPI)";
-  //         return "Paid (Cash)";
-  //       }
-
-  //       if ((b.paidAmount ?? 0) > 0 && (b.balance ?? 0) > 0) {
-  //         if (b.upiPayment == true) return "Half Paid (UPI)";
-  //         return "Half Paid (Cash)";
-  //       }
-
-  //       return "Unpaid";
-  //     }
-
-  //     final statusRank = {
-  //       "Paid (UPI)": 0,
-  //       "Paid (Cash)": 1,
-  //       "Half Paid (UPI)": 2,
-  //       "Half Paid (Cash)": 3,
-  //       "Unpaid": 4,
-  //     };
-
-  //     List<Bill> sortBills(List<Bill> bills) {
-  //       bills.sort((a, b) {
-  //         final sa = classifyStatus(a);
-  //         final sb = classifyStatus(b);
-  //         if (statusRank[sa] != statusRank[sb]) {
-  //           return statusRank[sa]!.compareTo(statusRank[sb]!);
-  //         }
-  //         return a.createdAt.compareTo(b.createdAt);
-  //       });
-  //       return bills;
-  //     }
-
-  //     created = sortBills(created);
-  //     paidToday = sortBills(paidToday);
-
-  //     //---------------------------------------------------------------------------
-  //     // TABLE ROW BUILDING
-  //     //---------------------------------------------------------------------------
-  //     List<List<String>> buildRows(List<Bill> bills) {
-  //       int i = 1;
-  //       return bills.map((b) {
-  //         return [
-  //           (i++).toString(),
-  //           (b.shopName ?? '').toString(),
-  //           classifyStatus(b),
-  //           (b.discountedTotal ?? 0).toStringAsFixed(2),
-  //           (b.paidAmount ?? 0).toStringAsFixed(2),
-  //           (b.balance ?? 0).toStringAsFixed(2),
-  //           (b.billNumber ?? '').toString(),
-  //         ];
-  //       }).toList();
-  //     }
-
-  //     //---------------------------------------------------------------------------
-  //     // SUMMARY TOTALS
-  //     //---------------------------------------------------------------------------
-  //     double fullPaidUPI(List<Bill> bills) => bills
-  //         .where((b) => b.isPaid == true && b.upiPayment == true)
-  //         .fold(0, (s, b) => s + (b.discountedTotal ?? 0));
-
-  //     double fullPaidCash(List<Bill> bills) => bills
-  //         .where((b) => b.isPaid == true && b.upiPayment != true)
-  //         .fold(0, (s, b) => s + (b.discountedTotal ?? 0));
-
-  //     double halfPaidUPI(List<Bill> bills) => bills
-  //         .where(
-  //           (b) =>
-  //               (b.isPaid != true) &&
-  //               (b.paidAmount ?? 0) > 0 &&
-  //               b.upiPayment == true,
-  //         )
-  //         .fold(0, (s, b) => s + (b.paidAmount ?? 0));
-
-  //     double halfPaidCash(List<Bill> bills) => bills
-  //         .where(
-  //           (b) =>
-  //               (b.isPaid != true) &&
-  //               (b.paidAmount ?? 0) > 0 &&
-  //               b.upiPayment != true,
-  //         )
-  //         .fold(0, (s, b) => s + (b.paidAmount ?? 0));
-
-  //     double unpaidTotal(List<Bill> bills) =>
-  //         bills.fold(0, (s, b) => s + (b.balance ?? 0));
-
-  //     // CREATED TOTAL
-  //     final totalPaidUPI_created = fullPaidUPI(created) + halfPaidUPI(created);
-  //     final totalPaidCash_created =
-  //         fullPaidCash(created) + halfPaidCash(created);
-  //     final totalUnpaid_created = unpaidTotal(created);
-  //     final total_created_today =
-  //         totalPaidUPI_created + totalPaidCash_created + totalUnpaid_created;
-
-  //     // PAID TODAY TOTAL
-  //     final totalPaidUPI_today =
-  //         fullPaidUPI(paidToday) + halfPaidUPI(paidToday);
-  //     final totalPaidCash_today =
-  //         fullPaidCash(paidToday) + halfPaidCash(paidToday);
-
-  //     //---------------------------------------------------------------------------
-  //     // FINAL PDF (ONE PAGE FLOW)
-  //     //---------------------------------------------------------------------------
-  //     pdf.addPage(
-  //       pw.MultiPage(
-  //         pageFormat: PdfPageFormat.a4,
-  //         margin: const pw.EdgeInsets.all(20),
-  //         build:
-  //             (context) => [
-  //               // TITLE
-  //               pw.Text(
-  //                 "Bills Report - ${DateFormat('dd/MM/yyyy').format(date)}",
-  //                 style: pw.TextStyle(
-  //                   fontSize: 20,
-  //                   fontWeight: pw.FontWeight.bold,
-  //                 ),
-  //               ),
-  //               pw.SizedBox(height: 20),
-
-  //               //-------------------------------------------------------------------
-  //               // CREATED BILLS SECTION
-  //               //-------------------------------------------------------------------
-  //               pw.Text(
-  //                 "Created Bills",
-  //                 style: pw.TextStyle(
-  //                   fontSize: 16,
-  //                   fontWeight: pw.FontWeight.bold,
-  //                 ),
-  //               ),
-  //               pw.SizedBox(height: 10),
-
-  //               pw.TableHelper.fromTextArray(
-  //                 headers: [
-  //                   "S.No",
-  //                   "Shop",
-  //                   "Status",
-  //                   "Amount",
-  //                   "Paid",
-  //                   "Balance",
-  //                   "Bill No",
-  //                 ],
-  //                 data: buildRows(created),
-  //                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-  //               ),
-
-  //               pw.SizedBox(height: 25),
-
-  //               //-------------------------------------------------------------------
-  //               // PAID TODAY SECTION
-  //               //-------------------------------------------------------------------
-  //               pw.Text(
-  //                 "Paid Today",
-  //                 style: pw.TextStyle(
-  //                   fontSize: 16,
-  //                   fontWeight: pw.FontWeight.bold,
-  //                 ),
-  //               ),
-  //               pw.SizedBox(height: 10),
-
-  //               pw.TableHelper.fromTextArray(
-  //                 headers: [
-  //                   "S.No",
-  //                   "Shop",
-  //                   "Status",
-  //                   "Amount",
-  //                   "Paid",
-  //                   "Balance",
-  //                   "Bill No",
-  //                 ],
-  //                 data: buildRows(paidToday),
-  //                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-  //               ),
-
-  //               pw.SizedBox(height: 25),
-
-  //               //-------------------------------------------------------------------
-  //               // SUMMARY SECTION
-  //               //-------------------------------------------------------------------
-  //               pw.Text(
-  //                 "Summary",
-  //                 style: pw.TextStyle(
-  //                   fontSize: 18,
-  //                   fontWeight: pw.FontWeight.bold,
-  //                 ),
-  //               ),
-  //               pw.SizedBox(height: 20),
-
-  //               pw.Text(
-  //                 "Paid UPI Total (Created): ₹${totalPaidUPI_created.toStringAsFixed(2)}",
-  //               ),
-  //               pw.Text(
-  //                 "Paid Cash Total (Created): ₹${totalPaidCash_created.toStringAsFixed(2)}",
-  //               ),
-  //               pw.Text(
-  //                 "Unpaid Total (Created): ₹${totalUnpaid_created.toStringAsFixed(2)}",
-  //               ),
-  //               pw.Text(
-  //                 "Total Sale Today: ₹${total_created_today.toStringAsFixed(2)}",
-  //               ),
-
-  //               pw.SizedBox(height: 20),
-
-  //               pw.Text(
-  //                 "Paid Today Summary",
-  //                 style: pw.TextStyle(
-  //                   fontSize: 16,
-  //                   fontWeight: pw.FontWeight.bold,
-  //                 ),
-  //               ),
-  //               pw.SizedBox(height: 10),
-
-  //               pw.Text(
-  //                 "Paid UPI Today: ₹${totalPaidUPI_today.toStringAsFixed(2)}",
-  //               ),
-  //               pw.Text(
-  //                 "Paid Cash Today: ₹${totalPaidCash_today.toStringAsFixed(2)}",
-  //               ),
-  //             ],
-  //       ),
-  //     );
-
-  //     //---------------------------------------------------------------------------
-  //     // SAVE & OPEN
-  //     //---------------------------------------------------------------------------
-  //     final dir = await getApplicationDocumentsDirectory();
-  //     final file = File(
-  //       "${dir.path}/Bills_Report_${DateFormat('ddMMyyyy').format(date)}.pdf",
-  //     );
-
-  //     await file.writeAsBytes(await pdf.save());
-  //     print("PDF saved: ${file.path}");
-
-  //     await OpenFilex.open(file.path);
-  //   } catch (e, st) {
-  //     print("PDF ERROR: $e");
-  //     print(st);
-  //   }
-  // }
 
   Future<void> _generateReportPdf(
     BuildContext context,
@@ -1348,12 +116,40 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
       // CLASSIFY STATUS
       // -------------------------------------------------------------
       String classifyStatus(Bill b) {
+        final reportDate = DateTime(date.year, date.month, date.day);
+
+        bool isFullyPaidAsOfReportDate = false;
         if (b.isPaid == true) {
+          if (b.markedAsPaidAt != null) {
+            final mp = b.markedAsPaidAt!.toDate();
+            final markedDate = DateTime(mp.year, mp.month, mp.day);
+            if (!markedDate.isAfter(reportDate)) {
+              isFullyPaidAsOfReportDate = true;
+            }
+          } else {
+            isFullyPaidAsOfReportDate = true;
+          }
+        }
+
+        if (isFullyPaidAsOfReportDate) {
           if (b.upiPayment == true) return "Paid (UPI)";
           return "Paid (Cash)";
         }
 
-        if ((b.paidAmount) > 0 && (b.balance) > 0) {
+        bool hasPartialPaymentAsOfReportDate = false;
+        if ((b.paidAmount) > 0) {
+          if (b.paidTodayAt != null) {
+            final pt = b.paidTodayAt!.toDate();
+            final ptDate = DateTime(pt.year, pt.month, pt.day);
+            if (!ptDate.isAfter(reportDate)) {
+              hasPartialPaymentAsOfReportDate = true;
+            }
+          } else {
+            hasPartialPaymentAsOfReportDate = true;
+          }
+        }
+
+        if (hasPartialPaymentAsOfReportDate && !isFullyPaidAsOfReportDate && b.balance > 0) {
           if (b.upiPayment == true) return "Half Paid (UPI)";
           return "Half Paid (Cash)";
         }
@@ -1391,13 +187,22 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
       List<List<String>> buildRowsCreated(List<Bill> bills) {
         int i = 1;
         return bills.map((b) {
+          final status = classifyStatus(b);
+          double displayPaid = b.paidAmount;
+          double displayBalance = b.balance;
+          
+          if (status == "Unpaid") {
+              displayPaid = 0.0;
+              displayBalance = b.discountedTotal;
+          }
+
           return [
             (i++).toString(),
             b.shopName,
-            classifyStatus(b),
+            status,
             (b.discountedTotal).toStringAsFixed(2),
-            (b.paidAmount).toStringAsFixed(2), // cumulative
-            (b.balance).toStringAsFixed(2),
+            (displayPaid).toStringAsFixed(2), // cumulative
+            (displayBalance).toStringAsFixed(2),
             b.billNumber,
           ];
         }).toList();
@@ -1406,10 +211,11 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
       List<List<String>> buildRowsPaidToday(List<Bill> bills) {
         int i = 1;
         return bills.map((b) {
+          final status = classifyStatus(b);
           return [
             (i++).toString(),
             b.shopName,
-            classifyStatus(b),
+            status,
             (b.discountedTotal).toStringAsFixed(2),
             (b.paidToday).toStringAsFixed(2), // 🔥 Today's paid only
             (b.balance).toStringAsFixed(2),
@@ -1422,23 +228,24 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
       // SUMMARY HELPERS
       // -------------------------------------------------------------
       double fullPaidUPI(List<Bill> bills) => bills
-          .where((b) => b.isPaid == true && b.upiPayment == true)
+          .where((b) => classifyStatus(b) == "Paid (UPI)")
           .fold(0, (s, b) => s + b.discountedTotal);
 
       double fullPaidCash(List<Bill> bills) => bills
-          .where((b) => b.isPaid == true && b.upiPayment != true)
+          .where((b) => classifyStatus(b) == "Paid (Cash)")
           .fold(0, (s, b) => s + b.discountedTotal);
 
       double halfPaidUPI(List<Bill> bills) => bills
-          .where((b) => !b.isPaid && b.paidAmount > 0 && b.upiPayment == true)
+          .where((b) => classifyStatus(b) == "Half Paid (UPI)")
           .fold(0, (s, b) => s + b.paidAmount);
 
       double halfPaidCash(List<Bill> bills) => bills
-          .where((b) => !b.isPaid && b.paidAmount > 0 && b.upiPayment != true)
+          .where((b) => classifyStatus(b) == "Half Paid (Cash)")
           .fold(0, (s, b) => s + b.paidAmount);
 
-      double unpaidTotal(List<Bill> bills) =>
-          bills.fold(0, (s, b) => s + b.balance);
+      double unpaidTotal(List<Bill> bills) => bills
+          .where((b) => classifyStatus(b) == "Unpaid")
+          .fold(0, (s, b) => s + b.discountedTotal);
 
       // NEW: Outstanding paid today
       double outstandingPaidTodayCalc(List<Bill> bills) =>
@@ -1569,16 +376,16 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                 pw.SizedBox(height: 10),
 
                 pw.Text(
-                  "Paid UPI Total: ₹${totalPaidUPI_created.toStringAsFixed(2)}",
+                  "Paid UPI Total: \$${totalPaidUPI_created.toStringAsFixed(2)}",
                 ),
                 pw.Text(
-                  "Paid Cash Total: ₹${totalPaidCash_created.toStringAsFixed(2)}",
+                  "Paid Cash Total: \$${totalPaidCash_created.toStringAsFixed(2)}",
                 ),
                 pw.Text(
-                  "Unpaid Total: ₹${totalUnpaid_created.toStringAsFixed(2)}",
+                  "Unpaid Total: \$${totalUnpaid_created.toStringAsFixed(2)}",
                 ),
                 pw.Text(
-                  "Total Sale Today: ₹${total_created_today.toStringAsFixed(2)}",
+                  "Total Sale Today: \$${total_created_today.toStringAsFixed(2)}",
                 ),
 
                 pw.SizedBox(height: 20),
@@ -1593,14 +400,14 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                 pw.SizedBox(height: 10),
 
                 pw.Text(
-                  "Paid UPI Today: ₹${totalPaidUPI_today.toStringAsFixed(2)}",
+                  "Paid UPI Today: \$${totalPaidUPI_today.toStringAsFixed(2)}",
                 ),
                 pw.Text(
-                  "Paid Cash Today: ₹${totalPaidCash_today.toStringAsFixed(2)}",
+                  "Paid Cash Today: \$${totalPaidCash_today.toStringAsFixed(2)}",
                 ),
 
                 pw.Text(
-                  "Outstanding Paid Today: ₹${outstandingToday.toStringAsFixed(2)}",
+                  "Outstanding Paid Today: \$${outstandingToday.toStringAsFixed(2)}",
                 ),
               ],
         ),
@@ -1672,21 +479,20 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                   );
                 }
               } else if (value == 'shop_balance_pdf') {
-                unpaidBillsAsync.whenData((shopsData) async {
-                  final dateFiltered = _filterShopsData(shopsData);
-
-                  if (dateFiltered.isNotEmpty) {
-                    _showShopSelectionDialog(context, dateFiltered);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'No shops with balance found for current filter.',
-                        ),
-                      ),
-                    );
-                  }
-                });
+                final firestore = ref.read(firestoreServiceProvider);
+                final allShopsData = await showLoadingWhilepdf(
+                  context,
+                  () => firestore.fetchAllShopsWithUnpaidBills(),
+                );
+                if (allShopsData.isNotEmpty) {
+                  _showShopSelectionDialog(context, allShopsData);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('No shops with unpaid bills found.'),
+                    ),
+                  );
+                }
               } else if (value == 'logout') {
                 await ref.read(roleProvider.notifier).logout();
               }
@@ -1730,452 +536,435 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
           ),
         ],
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          Column(
-            children: [
-              paidBillsAsync.when(
-                data:
-                    (shopsData) => _buildFilterChipsWithTotals(shopsData, true),
-                loading: () => _buildFilterChipsWithTotals([], true),
-                error: (_, __) => _buildFilterChipsWithTotals([], true),
+          if (_tabController.index != 2)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: ShopDropdown(
+                controller: _shopDropdownController,
+                onSelected: (shop) {
+                  // handled by dropdown natively
+                },
               ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      cursorColor: Color.fromARGB(255, 2, 113, 192),
-                      controller: _searchController,
-                      decoration: const InputDecoration(
-                        hintText: 'Search by shop name...',
-                        prefixIcon: Icon(Icons.search),
-                        focusedBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(
-                            color: Color.fromARGB(255, 2, 113, 192),
-                          ),
-                        ),
-                      ),
-                      onChanged:
-                          (value) =>
-                              setState(() => shopQuery = value.toLowerCase()),
-                    ),
-                  ),
-                ],
-              ),
-              Expanded(
-                child: paidBillsAsync.when(
-                  data: (shopsData) {
-                    final dateFiltered = _filterShopsData(shopsData);
+            ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                Column(
+                  children: [
+                    Expanded(
+                      child: paidBillsAsync.when(
+                        data: (shopsData) {
+                          final filtered = shopsData.toList();
 
-                    final filtered =
-                        dateFiltered
-                            .where(
-                              (shop) => shop['shopName']
-                                  .toString()
-                                  .toLowerCase()
-                                  .contains(shopQuery.toLowerCase()),
-                            )
-                            .toList();
+                          if (filtered.isEmpty) {
+                            return Center(
+                              child: Text('No paid bills found for today.'),
+                            );
+                          }
 
-                    if (filtered.isEmpty) {
-                      return Center(
-                        child: Text(
-                          filterType != 'none'
-                              ? 'No paid bills found for selected ${filterType == 'date' ? 'date' : 'month'}.'
-                              : 'No paid bills found.',
-                        ),
-                      );
-                    }
+                          final totalPaidAcrossShops = filtered.fold<double>(
+                            0,
+                            (sum, shop) =>
+                                sum + (shop['totalPaid'] as num).toDouble(),
+                          );
 
-                    final totalPaidAcrossShops = filtered.fold<double>(
-                      0,
-                      (sum, shop) =>
-                          sum + (shop['totalPaid'] as num).toDouble(),
-                    );
+                          final totalPaidUpiAcrossShops = filtered.fold<double>(
+                            0,
+                            (sum, shop) =>
+                                sum + (shop['totalPaidUpi'] as num).toDouble(),
+                          );
 
-                    return Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Card(
-                            color: Colors.green.shade50,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        filterType != 'none'
-                                            ? 'Total Paid (${filterType == 'date' ? DateFormat('dd/MM/yyyy').format(selectedDate!) : DateFormat('MMM yyyy').format(selectedMonth!)})'
-                                            : 'Total Paid Across All Shops',
+                          final totalPaidCashAcrossShops = filtered.fold<double>(
+                            0,
+                            (sum, shop) =>
+                                sum + (shop['totalPaidCash'] as num).toDouble(),
+                          );
+
+                          return Column(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Card(
+                                  color: Colors.green.shade50,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              'Today\'s Total Paid',
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            Text(
+                                              '\$ ${totalPaidAcrossShops.toStringAsFixed(2)}',
+                                              style: const TextStyle(
+                                                color: Colors.green,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              'UPI: \$ ${totalPaidUpiAcrossShops.toStringAsFixed(2)}',
+                                              style: const TextStyle(
+                                                color: Colors.green,
+                                                fontWeight: FontWeight.w500,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            Text(
+                                              'Cash: \$ ${totalPaidCashAcrossShops.toStringAsFixed(2)}',
+                                              style: const TextStyle(
+                                                color: Colors.green,
+                                                fontWeight: FontWeight.w500,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              'Shops:  ',
+                                              style: const TextStyle(
+                                                fontSize: 16,
+
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            Text(
+                                              '${filtered.length}',
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                color: Colors.green,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            Text(
+                                              'Bills:  ',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            Text(
+                                              '${filtered.fold<int>(0, (sum, shop) => sum + (shop['count'] as int))}',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                color: Colors.green,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: ListView.builder(
+                                  itemCount: filtered.length,
+                                  itemBuilder: (context, index) {
+                                    final shopData = filtered[index];
+                                    final shopName =
+                                        shopData['shopName'] as String;
+                                    final count = shopData['count'] as int;
+                                    final paidBills =
+                                        shopData['bills'] as List<Bill>;
+
+                                    return ListTile(
+                                      title: Text(
+                                        shopName,
                                         style: const TextStyle(
-                                          fontSize: 16,
+                                          fontSize: 18,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
-                                      Text(
-                                        '\$ ${totalPaidAcrossShops.toStringAsFixed(2)}',
+                                      subtitle: Text('Paid Bills: $count'),
+                                      trailing: Text(
+                                        '\$ ${(shopData['totalPaid'] as num).toDouble().toStringAsFixed(2)}',
                                         style: const TextStyle(
                                           color: Colors.green,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        'Shops:  ',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Text(
-                                        '${filtered.length}',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          color: Colors.green,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Text(
-                                        'Bills:  ',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Text(
-                                        '${filtered.fold<int>(0, (sum, shop) => sum + (shop['count'] as int))}',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.green,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              final shopData = filtered[index];
-                              final shopName = shopData['shopName'] as String;
-                              final count = shopData['count'] as int;
-                              final paidBills = shopData['bills'] as List<Bill>;
-
-                              return ListTile(
-                                title: Text(
-                                  shopName,
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                subtitle: Text('Paid Bills: $count'),
-                                trailing: Text(
-                                  '\$ ${(shopData['totalPaid'] as num).toDouble().toStringAsFixed(2)}',
-                                  style: const TextStyle(color: Colors.green),
-                                ),
-                                onTap: () {
-                                  _showPaidBillsDialog(context, ref, paidBills);
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                  loading:
-                      () => const Center(
-                        child: CircularProgressIndicator(
-                          color: Color.fromARGB(255, 2, 113, 192),
-                        ),
-                      ),
-                  error: (err, _) => Center(child: Text('Error: $err')),
-                ),
-              ),
-            ],
-          ),
-
-          Column(
-            children: [
-              unpaidBillsAsync.when(
-                data:
-                    (shopsData) =>
-                        _buildFilterChipsWithTotals(shopsData, false),
-                loading: () => _buildFilterChipsWithTotals([], false),
-                error: (_, __) => _buildFilterChipsWithTotals([], false),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: TextField(
-                  cursorColor: Color.fromARGB(255, 2, 113, 192),
-                  controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: 'Search by shop name...',
-                    prefixIcon: Icon(Icons.search),
-                    focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Color.fromARGB(255, 2, 113, 192),
-                      ),
-                    ),
-                  ),
-                  onChanged:
-                      (value) =>
-                          setState(() => shopQuery = value.toLowerCase()),
-                ),
-              ),
-              Expanded(
-                child: unpaidBillsAsync.when(
-                  data: (shopsData) {
-                    final dateFiltered = _filterShopsData(shopsData);
-
-                    final filtered =
-                        dateFiltered
-                            .where(
-                              (shop) => shop['shopName']
-                                  .toString()
-                                  .toLowerCase()
-                                  .contains(shopQuery.toLowerCase()),
-                            )
-                            .toList();
-
-                    if (filtered.isEmpty) {
-                      return Center(
-                        child: Text(
-                          filterType != 'none'
-                              ? 'No unpaid bills found for selected ${filterType == 'date' ? 'date' : 'month'}.'
-                              : 'No unpaid bills found.',
-                        ),
-                      );
-                    }
-
-                    final totalUnPaidAcrossShops = filtered.fold<double>(
-                      0,
-                      (sum, shop) =>
-                          sum + (shop['totalUnPaid'] as num).toDouble(),
-                    );
-
-                    return Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Card(
-                            color: Colors.red.shade50,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        filterType != 'none'
-                                            ? 'Total Unpaid (${filterType == 'date' ? DateFormat('dd/MM/yyyy').format(selectedDate!) : DateFormat('MMM yyyy').format(selectedMonth!)})'
-                                            : 'Total Unpaid Across All Shops',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      Text(
-                                        '\$ ${totalUnPaidAcrossShops.toStringAsFixed(2)}',
-                                        style: const TextStyle(
-                                          color: Colors.red,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        'Shops:  ',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Text(
-                                        '${filtered.length}',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          color:
-                                              Colors
-                                                  .red, // value has different color
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(
-                                        width: 16,
-                                      ), // spacing between Shops and Bills
-                                      Text(
-                                        'Bills:  ',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Text(
-                                        '${filtered.fold<int>(0, (sum, shop) => sum + (shop['count'] as int))}',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color:
-                                              Colors
-                                                  .red, // value has different color
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: filtered.length,
-                            itemBuilder: (context, index) {
-                              final shopData = filtered[index];
-                              final shopName = shopData['shopName'] as String;
-                              final count = shopData['count'] as int;
-                              final unpaidBills =
-                                  shopData['bills'] as List<Bill>;
-
-                              return ListTile(
-                                title: Text(
-                                  shopName,
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                subtitle: Text('UnPaid Bills: $count'),
-                                trailing: Text(
-                                  '\$ ${(shopData['totalUnPaid'] as num).toDouble().toStringAsFixed(2)}',
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                                onTap: () {
-                                  _showUnPaidBillsDialog(
-                                    context,
-                                    ref,
-                                    unpaidBills,
-
-                                    // shopName,
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                  loading:
-                      () => const Center(
-                        child: CircularProgressIndicator(
-                          color: Color.fromARGB(255, 2, 113, 192),
-                        ),
-                      ),
-                  error: (err, _) => Center(child: Text('Error: $err')),
-                ),
-              ),
-            ],
-          ),
-
-          // Search by Bill Number Tab (unchanged)
-          Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: TextField(
-                  cursorColor: Color.fromARGB(255, 2, 113, 192),
-                  controller: _billSearchController,
-                  decoration: const InputDecoration(
-                    labelText: 'Enter Bill Number',
-                    prefixIcon: Icon(Icons.receipt_long),
-                    focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(
-                        color: Color.fromARGB(255, 2, 113, 192),
-                      ),
-                    ),
-                  ),
-                  onSubmitted: (val) => setState(() => billSearch = val.trim()),
-                ),
-              ),
-              Expanded(
-                child:
-                    billSearch.isEmpty
-                        ? const Center(
-                          child: Text('Enter a bill number to search.'),
-                        )
-                        : FutureBuilder<Bill?>(
-                          future: firestore.fetchBillByNumber(billSearch),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return const Center(
-                                child: CircularProgressIndicator(
-                                  color: Color.fromARGB(255, 2, 113, 192),
-                                ),
-                              );
-                            }
-                            if (!snapshot.hasData) {
-                              return const Center(
-                                child: Text('Bill not found.'),
-                              );
-                            }
-                            final bill = snapshot.data!;
-                            return ListView(
-                              children: [
-                                ListTile(
-                                  title: Text('Bill #: ${bill.billNumber}'),
-                                  subtitle: Text('Shop: ${bill.shopName}'),
-                                  trailing: Text(
-                                    '\$ ${bill.discountedTotal.toStringAsFixed(2)}',
-                                  ),
-                                  onTap: () {
-                                    showFullBillDetailsDialog(context, bill);
+                                      onTap: () {
+                                        _showPaidBillsDialog(
+                                          context,
+                                          ref,
+                                          paidBills,
+                                        );
+                                      },
+                                    );
                                   },
                                 ),
-                              ],
+                              ),
+                            ],
+                          );
+                        },
+                        loading:
+                            () => const Center(
+                              child: CircularProgressIndicator(
+                                color: Color.fromARGB(255, 2, 113, 192),
+                              ),
+                            ),
+                        error: (err, _) => Center(child: Text('Error: $err')),
+                      ),
+                    ),
+                  ],
+                ),
+
+                Column(
+                  children: [
+                    Expanded(
+                      child: unpaidBillsAsync.when(
+                        data: (shopsData) {
+                          final filtered = shopsData.toList();
+
+                          if (filtered.isEmpty) {
+                            return Center(
+                              child: Text('No unpaid bills found for today.'),
                             );
-                          },
+                          }
+
+                          final totalUnPaidAcrossShops = filtered.fold<double>(
+                            0,
+                            (sum, shop) =>
+                                sum + (shop['totalUnPaid'] as num).toDouble(),
+                          );
+
+                          return Column(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Card(
+                                  color: Colors.red.shade50,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              'Today\'s Total Unpaid',
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            Text(
+                                              '\$ ${totalUnPaidAcrossShops.toStringAsFixed(2)}',
+                                              style: const TextStyle(
+                                                color: Colors.red,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              'Shops:  ',
+                                              style: const TextStyle(
+                                                fontSize: 16,
+
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            Text(
+                                              '${filtered.length}',
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                color:
+                                                    Colors
+                                                        .red, // value has different color
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(
+                                              width: 16,
+                                            ), // spacing between Shops and Bills
+                                            Text(
+                                              'Bills:  ',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            Text(
+                                              '${filtered.fold<int>(0, (sum, shop) => sum + (shop['count'] as int))}',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                color:
+                                                    Colors
+                                                        .red, // value has different color
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: ListView.builder(
+                                  itemCount: filtered.length,
+                                  itemBuilder: (context, index) {
+                                    final shopData = filtered[index];
+                                    final shopName =
+                                        shopData['shopName'] as String;
+                                    final count = shopData['count'] as int;
+                                    final unpaidBills =
+                                        shopData['bills'] as List<Bill>;
+
+                                    return ListTile(
+                                      title: Text(
+                                        shopName,
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      subtitle: Text('UnPaid Bills: $count'),
+                                      trailing: Text(
+                                        '\$ ${(shopData['totalUnPaid'] as num).toDouble().toStringAsFixed(2)}',
+                                        style: TextStyle(color: Colors.red),
+                                      ),
+                                      onTap: () {
+                                        _showUnPaidBillsDialog(
+                                          context,
+                                          ref,
+                                          unpaidBills,
+
+                                          // shopName,
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                        loading:
+                            () => const Center(
+                              child: CircularProgressIndicator(
+                                color: Color.fromARGB(255, 2, 113, 192),
+                              ),
+                            ),
+                        error: (err, _) => Center(child: Text('Error: $err')),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Search by Bill Number Tab (unchanged)
+                Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: TextField(
+                        cursorColor: Color.fromARGB(255, 2, 113, 192),
+                        controller: _billSearchController,
+                        decoration: const InputDecoration(
+                          labelText: 'Enter Bill Number',
+                          prefixIcon: Icon(Icons.receipt_long),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Color.fromARGB(255, 2, 113, 192),
+                            ),
+                          ),
                         ),
-              ),
-            ],
+                        onSubmitted:
+                            (val) => setState(() => billSearch = val.trim()),
+                      ),
+                    ),
+                    Expanded(
+                      child:
+                          billSearch.isEmpty
+                              ? const Center(
+                                child: Text('Enter a bill number to search.'),
+                              )
+                              : FutureBuilder<Bill?>(
+                                future: firestore.fetchBillByNumber(billSearch),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return const Center(
+                                      child: CircularProgressIndicator(
+                                        color: Color.fromARGB(255, 2, 113, 192),
+                                      ),
+                                    );
+                                  }
+                                  if (!snapshot.hasData) {
+                                    return const Center(
+                                      child: Text('Bill not found.'),
+                                    );
+                                  }
+                                  final bill = snapshot.data!;
+                                  return ListView(
+                                    children: [
+                                      ListTile(
+                                        title: Text(
+                                          'Bill #: ${bill.billNumber}',
+                                        ),
+                                        subtitle: Text(
+                                          'Shop: ${bill.shopName}',
+                                        ),
+                                        trailing: Text(
+                                          '\$ ${bill.discountedTotal.toStringAsFixed(2)}',
+                                        ),
+                                        onTap: () {
+                                          showFullBillDetailsDialog(
+                                            context,
+                                            bill,
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -2402,11 +1191,11 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  // ✅ Created At
+                                  // ✅ Created At & Marked As Paid At
                                   Text(
-                                    DateFormat(
-                                      'dd MMM yyyy',
-                                    ).format(bill.createdAt.toDate()),
+                                    bill.markedAsPaidAt != null
+                                        ? '${DateFormat('dd MMM yyyy').format(bill.createdAt.toDate())} / ${DateFormat('dd MMM yyyy').format(bill.markedAsPaidAt!.toDate())}'
+                                        : DateFormat('dd MMM yyyy').format(bill.createdAt.toDate()),
                                     style: const TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey,
@@ -2469,10 +1258,15 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
     List<Map<String, dynamic>> shopsData,
   ) {
     String searchShop = '';
+    // Calculate total unpaid amount across all shops
+    final double totalUnpaidAll = shopsData.fold<double>(
+      0.0,
+      (sum, shop) => sum + (shop['totalUnPaid'] as num).toDouble(),
+    );
     showDialog(
       barrierDismissible: false,
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final filteredShops =
@@ -2492,6 +1286,17 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Display total unpaid amount above the search bar
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Text(
+                        'Total Unpaid: \$${totalUnpaidAll.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
                     TextField(
                       decoration: const InputDecoration(
                         hintText: 'Search shop...',
@@ -2516,7 +1321,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                               'Pending Balance: \$${(shop['totalUnPaid'] as num).toDouble().toStringAsFixed(2)}',
                             ),
                             onTap: () async {
-                              Navigator.pop(context);
+                              Navigator.pop(dialogContext);
                               await showLoadingWhilepdf(
                                 context,
                                 () => generateSingleShopPendingBillsPdf(
@@ -2535,7 +1340,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.pop(dialogContext),
                   child: const Text('Cancel'),
                 ),
               ],
@@ -2995,8 +1800,7 @@ class _BillExplorerScreenState extends ConsumerState<BillExplorerScreen>
                                       0.0;
 
                                   await showLoadingWhileTask(context, () async {
-                                    final bills = await firestore
-                                        .fetchBillsByIds(selectedIds);
+                                    final bills = selectedBills.values.toList();
                                     await firestore.markBillsAsPaid(
                                       bills,
                                       paidAmount,
